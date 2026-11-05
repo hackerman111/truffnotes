@@ -1,0 +1,83 @@
+{
+  "phase": "F04",
+  "title": "Runtime, Android lifecycle и очереди (:tn-runtime, :tn-platform, :tn-ui, :app)",
+  "seed": 20261105,
+  "requirements_verified": [
+    "R01",
+    "R05",
+    "R29",
+    "R36",
+    "acceptance38",
+    "acceptance39",
+    "acceptance40",
+    "acceptance43",
+    "acceptance44"
+  ],
+  "test_suites": [
+    {
+      "suite": "inkspace.platform.F04TransportAndHandlesTest",
+      "cases": [
+        "stale_handle",
+        "double_close",
+        "invalid_payload",
+        "mutate_after_handoff",
+        "pool_reuse_after_cancel",
+        "snapshot_alias"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.runtime.F04RuntimeQueuesAndMemoryTest",
+      "cases": [
+        "overflow_policies",
+        "durable_order",
+        "no_starvation",
+        "shutdown_pending",
+        "stale_session",
+        "pins_counted",
+        "cancel_releases",
+        "lease_budget"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.runtime.F04LifecycleAndPersistenceTest",
+      "cases": [
+        "lifecycle_100_rotation_and_surface_cycles_preserve_durable_prefix"
+      ],
+      "cycles": 100,
+      "durable_prefix_loss_count": 0,
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.runtime.CoreTransactionsTest",
+      "cases": [
+        "runtime_commits_undo_redo_and_persists_through_document_store"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.ui.F04BaselineUiControllerTest",
+      "cases": [
+        "baseline_controller_handles_save_states_pending_overflow_and_callback_profiling"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.app.F04AppLifecycleAndCallbackProfileTest",
+      "cases": [
+        "app_container_handles_rotation_background_reopen_and_profiles_callbacks_under_1ms"
+      ],
+      "raw_profile_path": "docs/evidence/F04/callback-profile-raw.json",
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.runtime.RuntimeAndroidLifecycleInstrumentedTest",
+      "cases": [
+        "android_instrumented_100_rotation_and_surface_cycles_preserve_durable_prefix"
+      ],
+      "compile_status": "PASS (:tn-runtime:assembleDebugAndroidTest)",
+      "device_execution_status": "PENDING_PHYSICAL_OR_AVD_DEVICE"
+    }
+  ]
+}

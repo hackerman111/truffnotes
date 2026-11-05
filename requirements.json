@@ -81,8 +81,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f04",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F04LifecycleAndPersistenceTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F04/report.md"
     },
     {
@@ -559,8 +559,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f04",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F04LifecycleAndPersistenceTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F04/report.md"
     },
     {
@@ -1259,8 +1259,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f04",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F04LifecycleAndPersistenceTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F04/report.md"
     },
     {
@@ -1276,8 +1276,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f04",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F04LifecycleAndPersistenceTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F04/report.md"
     },
     {
@@ -1293,8 +1293,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f04",
-      "status": "planned",
+      "scenario_or_test_path": "app/src/test/kotlin/inkspace/app/F04AppLifecycleAndCallbackProfileTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F04/report.md"
     },
     {
@@ -1342,8 +1342,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f04",
-      "status": "planned",
+      "scenario_or_test_path": "app/src/test/kotlin/inkspace/app/F04AppLifecycleAndCallbackProfileTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F04/report.md"
     },
     {
@@ -1359,8 +1359,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f04",
-      "status": "planned",
+      "scenario_or_test_path": "app/src/test/kotlin/inkspace/app/F04AppLifecycleAndCallbackProfileTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F04/report.md"
     },
     {

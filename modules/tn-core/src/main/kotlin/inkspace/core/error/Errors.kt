@@ -44,4 +44,26 @@ sealed interface StorageError : CoreError {
 sealed interface SubmitError : CoreError {
     data class QueueOverflow(val currentDepth: Int, val maxDepth: Int) : SubmitError
     data class ShutdownInProgress(val message: String) : SubmitError
+    data class ByteBudgetExceeded(
+        val requestedBytes: Long,
+        val currentBytes: Long,
+        val maxBytes: Long
+    ) : SubmitError
+    data class StaleSession(val session: String, val reason: String) : SubmitError
+    data class StaleHandle(
+        val handleId: String,
+        val expectedGeneration: Long,
+        val actualGeneration: Long
+    ) : SubmitError
+    data class InvalidPayload(val reason: String) : SubmitError
+    data class PendingPersistenceOverflow(
+        val pendingCount: Int,
+        val pendingBytes: Long
+    ) : SubmitError
+}
+
+sealed interface StartError : CoreError {
+    data class InvalidConfiguration(val reason: String) : StartError
+    data class StorageInitFailed(val reason: String) : StartError
+    data class AlreadyClosed(val reason: String) : StartError
 }

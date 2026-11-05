@@ -55,6 +55,23 @@ data class InvalidWriteSet(val reason: String) : StorageError
 sealed interface SubmitError : CoreError {
 data class QueueOverflow(val currentDepth: Int, val maxDepth: Int) : SubmitError
 data class ShutdownInProgress(val message: String) : SubmitError
+data class ByteBudgetExceeded(
+val requestedBytes: Long,
+val currentBytes: Long,
+val maxBytes: Long
+data class StaleSession(val session: String, val reason: String) : SubmitError
+data class StaleHandle(
+val handleId: String,
+val expectedGeneration: Long,
+val actualGeneration: Long
+data class InvalidPayload(val reason: String) : SubmitError
+data class PendingPersistenceOverflow(
+val pendingCount: Int,
+val pendingBytes: Long
+sealed interface StartError : CoreError {
+data class InvalidConfiguration(val reason: String) : StartError
+data class StorageInitFailed(val reason: String) : StartError
+data class AlreadyClosed(val reason: String) : StartError
 value class DocumentId(val value: String) {
 value class SpaceId(val value: String) {
 value class PageId(val value: String) {
@@ -69,6 +86,10 @@ value class Revision(val value: Long) : Comparable<Revision> {
 fun next(): Revision = Revision(value + 1L)
 value class SessionEpoch(val value: Long) {
 value class RequestGeneration(val value: Long) {
+value class SurfaceEpoch(val value: Long) {
+fun next(): SurfaceEpoch = SurfaceEpoch(value + 1L)
+value class ResizeGeneration(val value: Long) {
+fun next(): ResizeGeneration = ResizeGeneration(value + 1L)
 data class Limits(
 val maxObjectsPerSpace: Int = 10_000,
 val maxGroupDepth: Int = 32,
@@ -123,6 +144,8 @@ val style: ObjectStyle = ObjectStyle(),
 val isLocked: Boolean = false,
 val version: Long = 1L,
 val payloadDigest: Long = CoreCodec.computePayloadDigest(payload)
+fun frozen(): SceneObject {
+val frozenPayload = when (payload) {
 fun estimatedMemoryBytes(): Int {
 val payloadBytes = when (payload) {
 val id: ObjectId
@@ -133,7 +156,8 @@ val isLocked: Boolean
 val version: Long
 val residency: ResidencyState
 val residentBytes: Int
-data class Present(val obj: SceneObject) : DirectoryEntry {
+data class Present(val rawObj: SceneObject) : DirectoryEntry {
+val obj: SceneObject = rawObj.frozen()
 data class NonResident(
 val estimatedColdBytes: Int
 val entries: Map<ObjectId, DirectoryEntry>,
@@ -213,6 +237,10 @@ fun snapshot(): DocumentSnapshot {
 fun registerNonResidentObject(
 fun putResidentObjectDirect(obj: SceneObject) {
 val nextParents = LinkedHashMap(currentParentGroups)
+fun fromSnapshot(snapshot: DocumentSnapshot): DocumentState {
+val pMap = snapshot.pages.associateBy { it.id }
+val lMap = snapshot.layers.associateBy { it.id }
+val parents = LinkedHashMap<ObjectId, ObjectId>()
 fun createInitial(
 val pages = listOf(initialPage)
 val layers = listOf(initialLayer)
@@ -705,6 +733,187 @@ fun getLayer(layerId: LayerId): LayerDescriptor? = null
 fun parentGroupOf(id: ObjectId): ObjectId? = null
 val pages: List<PageDescriptor> get() = emptyList()
 val layers: List<LayerDescriptor> get() = emptyList()
+enum class MemoryCategory(val defaultCapBytes: Long) {
+enum class MemoryPressureLevel {
+enum class InputActionKind(val isTerminal: Boolean) {
+enum class SaveStatusKind {
+data class SaveStatus(
+val session: SessionKey,
+val status: SaveStatusKind,
+val appliedRevision: Revision,
+val durableRevision: Revision,
+val pendingCount: Int,
+val pendingBytes: Long,
+val lastError: String? = null
+val hasUnsavedChanges: Boolean
+data class ViewportState(
+val session: SessionKey,
+val camera: CameraTransform = CameraTransform(),
+val widthPx: Int = 1080,
+val heightPx: Int = 1920,
+val isLandscape: Boolean = false,
+val isReadOnly: Boolean = false,
+val isFocusMode: Boolean = false,
+val activePageId: PageId? = null,
+val selectedObjectIds: Set<ObjectId> = emptySet(),
+val surfaceEpoch: SurfaceEpoch = SurfaceEpoch(0L),
+val resizeGeneration: ResizeGeneration = ResizeGeneration(0L)
+class ImmutableInputBatch private constructor(
+val session: SessionKey,
+val pointerId: Int,
+val sequenceNumber: Long,
+val action: InputActionKind,
+val sampleCount: Int,
+val byteSize: Int,
+fun sampleX(index: Int): Float {
+fun sampleY(index: Int): Float {
+fun samplePressure(index: Int): Float {
+fun sampleTilt(index: Int): Float {
+fun sampleTimestampMs(index: Int): Long {
+fun coalesceMoveWith(next: ImmutableInputBatch, maxBatchBytes: Int): ImmutableInputBatch? {
+val total = this.sampleCount + next.sampleCount
+val combinedBytes = BATCH_HEADER_BYTES + total * BYTES_PER_SAMPLE
+val mergedXs = FloatArray(total)
+val mergedYs = FloatArray(total)
+val mergedPressures = FloatArray(total)
+val mergedTilts = FloatArray(total)
+val mergedTimestamps = LongArray(total)
+fun copyFromArrays(
+val computedBytes = BATCH_HEADER_BYTES + count * BYTES_PER_SAMPLE
+val x = xs[i]
+val y = ys[i]
+val p = pressures[i]
+val t = tilts[i]
+val ts = timestampsMs[i]
+data class RuntimeConfig(
+val storageRootPath: String,
+val maxWarmSessions: Int = 3,
+val maxRenderSnapshots: Int = 2,
+val workerThreads: Int = 2,
+val totalQueueByteCap: Long = 16L * 1024L * 1024L,
+val inputQueueMaxBytes: Long = 4L * 1024L * 1024L,
+val maxInputBatchBytes: Int = 64 * 1024,
+val terminalControlReservedSlots: Int = 64,
+val persistQueueMaxEnvelopes: Int = 256,
+val persistQueueMaxBytes: Long = 8L * 1024L * 1024L,
+val durableAckMaxSlots: Int = 256,
+val durableAckMaxBytes: Long = 256L * 1024L,
+val mainEventsMaxEnvelopes: Int = 256,
+val mainEventsMaxBytes: Long = 2L * 1024L * 1024L,
+val errorEventsMaxSlots: Int = 64,
+val errorEventsMaxBytes: Long = 128L * 1024L,
+val limits: Limits = Limits()
+data class PlatformPorts(
+val geometryPort: GeometryPort? = null,
+val textPort: TextPort? = null,
+val resourcePort: ResourcePort? = null,
+val storagePort: StoragePort? = null,
+val pdfPort: PdfPort? = null,
+val renderPort: RenderPort? = null,
+val jobSink: JobSink? = null
+sealed interface AppCommand {
+data class OpenSession(
+val documentId: DocumentId,
+val createIfMissing: Boolean = true,
+val initialViewport: ViewportState? = null
+data class CloseSession(
+val session: SessionKey
+data class SubmitEdit(
+val session: SessionKey,
+val plan: EditPlan,
+val estimatedBytes: Long = 1024L,
+val stagedAssets: List<StagedAssetRef> = emptyList()
+data class SubmitInputBatch(
+val batch: ImmutableInputBatch
+data class SubmitControl(
+val session: SessionKey,
+val sequenceNumber: Long,
+val action: InputActionKind,
+val pointerId: Int = 0
+data class UpdateViewport(
+val state: ViewportState
+data class AttachSurface(
+val session: SessionKey,
+val surfaceEpoch: SurfaceEpoch,
+val widthPx: Int,
+val heightPx: Int,
+val resizeGeneration: ResizeGeneration
+data class DetachSurface(
+val session: SessionKey,
+val surfaceEpoch: SurfaceEpoch
+data class BackgroundFlush(
+val session: SessionKey
+data class TrimMemory(
+val level: MemoryPressureLevel
+data class Undo(
+val session: SessionKey
+data class Redo(
+val session: SessionKey
+data class DeliverJobReply(
+val session: SessionKey,
+val generation: RequestGeneration,
+val resource: String,
+val payloadBytes: Int = 256
+sealed interface AppEvent {
+data class SessionOpened(
+val session: SessionKey,
+val snapshot: DocumentSnapshot,
+val saveStatus: SaveStatus,
+val viewport: ViewportState
+data class SessionClosed(
+val session: SessionKey,
+val finalDurableRevision: Revision
+data class SnapshotPublished(
+val session: SessionKey,
+val snapshot: DocumentSnapshot,
+val saveStatus: SaveStatus
+data class SaveStatusChanged(
+val saveStatus: SaveStatus
+data class ViewportChanged(
+val viewport: ViewportState
+data class InputAccepted(
+val session: SessionKey,
+val pointerId: Int,
+val sequenceNumber: Long,
+val sampleCount: Int,
+val action: InputActionKind
+data class InputDraftCanceled(
+val session: SessionKey,
+val pointerId: Int,
+val sequenceNumber: Long,
+val reason: String
+data class SurfaceAttachedAck(
+val session: SessionKey,
+val surfaceEpoch: SurfaceEpoch,
+val resizeGeneration: ResizeGeneration
+data class SurfaceTeardownAck(
+val session: SessionKey,
+val surfaceEpoch: SurfaceEpoch
+data class JobReplyAccepted(
+val session: SessionKey,
+val generation: RequestGeneration,
+val resource: String
+data class MemoryTrimmed(
+val level: MemoryPressureLevel,
+val reclaimedBytes: Long
+data class ErrorEvent(
+val session: SessionKey?,
+val code: String,
+val message: String
+data class Closed(
+val completedPendingCommits: Int
+data class EventBatch(
+val events: List<AppEvent>,
+val errorEvents: List<AppEvent.ErrorEvent>,
+val coalescedMetadataCount: Int = 0
+interface AppGateway {
+fun trySend(command: AppCommand): Outcome<RequestId, SubmitError>
+fun pollEvents(max: Int): EventBatch
+fun closeAsync(): Outcome<RequestId, SubmitError>
+fun latestSnapshot(session: SessionKey): DocumentSnapshot? = null
+fun latestSaveStatus(session: SessionKey): SaveStatus? = null
+fun latestViewport(session: SessionKey): ViewportState? = null
+fun acknowledgeError(error: AppEvent.ErrorEvent) {}
 data class DocPoint(val x: Double, val y: Double) {
 data class DocRect(
 val left: Double,

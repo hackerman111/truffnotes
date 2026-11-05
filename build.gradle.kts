@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.jvm) apply false
     alias(libs.plugins.android.library) apply false
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.compose.compiler) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.detekt) apply false
     alias(libs.plugins.ktlint) apply false
@@ -69,7 +71,12 @@ tasks.register("architectureCheck") {
             }
         }
 
-        // 2. Verify all other production modules depend ONLY on :tn-core from internal modules
+        // 2. Verify all other production modules follow the architecture dependency graph:
+        //    - functional modules, tn-platform, tn-ui: depend ONLY on :tn-core
+        //    - tn-runtime: depends on :tn-core and feature modules (not tn-platform, tn-ui, app)
+        //    - app: depends on :tn-core, :tn-runtime, :tn-platform, :tn-ui (not feature modules directly)
+        val appAllowedTargets = setOf("tn-core", "tn-runtime", "tn-platform", "tn-ui")
+        val runtimeForbiddenTargets = setOf("tn-platform", "tn-ui", "app", "tn-test-support")
         subprojects.forEach { sp ->
             if (sp.name != "tn-core" && sp.name != "tn-test-support") {
                 val nonTestConfigurations = sp.configurations.filter { 
@@ -79,8 +86,28 @@ tasks.register("architectureCheck") {
                     config.dependencies.forEach { dep ->
                         if (dep is ProjectDependency) {
                             val target = dep.name
-                            if (target != "tn-core") {
-                                throw GradleException("Architecture violation: Module ${sp.name} may only depend on :tn-core, but depends on $target")
+                            when (sp.name) {
+                                "tn-runtime" -> {
+                                    if (target in runtimeForbiddenTargets) {
+                                        throw GradleException(
+                                            "Architecture violation: :tn-runtime cannot depend on $target"
+                                        )
+                                    }
+                                }
+                                "app" -> {
+                                    if (target !in appAllowedTargets) {
+                                        throw GradleException(
+                                            "Architecture violation: :app may only depend on $appAllowedTargets, not $target"
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    if (target != "tn-core") {
+                                        throw GradleException(
+                                            "Architecture violation: Module ${sp.name} may only depend on :tn-core, but depends on $target"
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -176,7 +203,8 @@ tasks.register("ktlintCheck") {
     description = "Checks Kotlin code style"
     doLast {
         // Simple built-in linter for basic style checks across modules
-        val ktFiles = fileTree("modules").matching { include("**/*.kt") }
+        val ktFiles = fileTree("modules").matching { include("**/*.kt") } +
+            fileTree("app").matching { include("**/*.kt") }
         var violationCount = 0
         ktFiles.forEach { file ->
             val lines = file.readLines()

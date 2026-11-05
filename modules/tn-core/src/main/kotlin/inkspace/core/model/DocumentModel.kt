@@ -132,6 +132,16 @@ data class SceneObject(
         require(version >= 1L) { "SceneObject version must be >= 1" }
     }
 
+    fun frozen(): SceneObject {
+        val frozenPayload = when (payload) {
+            is StrokePayload -> payload.copy(samples = java.util.List.copyOf(payload.samples))
+            is TextPayload -> payload.copy(runs = java.util.List.copyOf(payload.runs))
+            is GroupPayload -> payload.copy(members = java.util.List.copyOf(payload.members))
+            else -> payload
+        }
+        return if (frozenPayload === payload) this else copy(payload = frozenPayload)
+    }
+
     fun estimatedMemoryBytes(): Int {
         val payloadBytes = when (payload) {
             is StrokePayload -> 64 + payload.samples.size * 24
@@ -153,7 +163,8 @@ internal sealed interface DirectoryEntry {
     val residency: ResidencyState
     val residentBytes: Int
 
-    data class Present(val obj: SceneObject) : DirectoryEntry {
+    data class Present(val rawObj: SceneObject) : DirectoryEntry {
+        val obj: SceneObject = rawObj.frozen()
         override val id: ObjectId get() = obj.id
         override val space: SpaceId get() = obj.space
         override val layer: LayerId get() = obj.layer
@@ -393,12 +404,15 @@ class DocumentSnapshot internal constructor(
     override val version: DocVersion,
     val kind: DocumentKind,
     val directory: ChunkedObjectDirectory,
-    override val pages: List<PageDescriptor>,
-    override val layers: List<LayerDescriptor>,
+    rawPages: List<PageDescriptor>,
+    rawLayers: List<LayerDescriptor>,
     private val pageMap: Map<PageId, PageDescriptor>,
     private val layerMap: Map<LayerId, LayerDescriptor>,
     private val parentGroupMap: Map<ObjectId, ObjectId>
 ) : DocumentRead {
+
+    override val pages: List<PageDescriptor> = java.util.List.copyOf(rawPages)
+    override val layers: List<LayerDescriptor> = java.util.List.copyOf(rawLayers)
 
     override val totalObjectCount: Int
         get() = directory.totalCount
@@ -426,10 +440,12 @@ class DocumentSnapshot internal constructor(
     fun orderedSceneObjects(): List<SceneObject> {
         val layerOrder = HashMap<LayerId, Int>(layers.size)
         layers.forEachIndexed { idx, l -> layerOrder[l.id] = idx }
-        return directory.allResidentObjects().sortedWith(
-            compareBy<SceneObject> { layerOrder[it.layer] ?: Int.MAX_VALUE }
-                .thenBy { it.style.zOrder }
-                .thenBy { it.id.value }
+        return java.util.List.copyOf(
+            directory.allResidentObjects().sortedWith(
+                compareBy<SceneObject> { layerOrder[it.layer] ?: Int.MAX_VALUE }
+                    .thenBy { it.style.zOrder }
+                    .thenBy { it.id.value }
+            )
         )
     }
 
@@ -567,8 +583,8 @@ class DocumentState private constructor(
             version = currentVersion,
             kind = kind,
             directory = currentDirectory,
-            pages = currentPages,
-            layers = currentLayers,
+            rawPages = currentPages,
+            rawLayers = currentLayers,
             pageMap = currentPageMap,
             layerMap = currentLayerMap,
             parentGroupMap = currentParentGroups
@@ -627,6 +643,29 @@ class DocumentState private constructor(
     }
 
     companion object {
+        fun fromSnapshot(snapshot: DocumentSnapshot): DocumentState {
+            val pMap = snapshot.pages.associateBy { it.id }
+            val lMap = snapshot.layers.associateBy { it.id }
+            val parents = LinkedHashMap<ObjectId, ObjectId>()
+            for (obj in snapshot.directory.allResidentObjects()) {
+                if (obj.payload is GroupPayload) {
+                    for (m in obj.payload.members) {
+                        parents[m] = obj.id
+                    }
+                }
+            }
+            return DocumentState(
+                currentVersion = snapshot.version,
+                kind = snapshot.kind,
+                currentDirectory = snapshot.directory,
+                currentPages = snapshot.pages,
+                currentLayers = snapshot.layers,
+                currentPageMap = pMap,
+                currentLayerMap = lMap,
+                currentParentGroups = parents
+            )
+        }
+
         fun createInitial(
             documentId: DocumentId,
             kind: DocumentKind = DocumentKind.Notebook,

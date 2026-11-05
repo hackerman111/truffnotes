@@ -200,11 +200,11 @@ W4 — stress, не обещание 60 FPS при 10000 одновременн�
 
 **API:** `Runtime.start(config: RuntimeConfig, ports: PlatformPorts): Outcome<AppGateway, StartError>`; core `AppGateway.trySend(command: AppCommand): Outcome<RequestId, SubmitError>`, `pollEvents(max: Int): EventBatch`, `closeAsync(): Outcome<RequestId, SubmitError>` (завершение — событие Closed после pending persistence). Все session/resource handles с generation; собственного foreign-function facade нет.
 
-- [ ] F04.1 Реализовать executor ownership, byte admission и отдельные очереди durable/input/latest-view/control. Tests `overflow_policies`, `durable_order`, `no_starvation`, `shutdown_pending`, `stale_session` проверяют все caps/terminal events.
-- [ ] F04.2 Создать MemoryGovernor/reservations и limited worker pool; tests `pins_counted`, `cancel_releases`, `lease_budget`. Не создавать thread/executor на feature/session.
-- [ ] F04.3 Реализовать Kotlin typed transport/pooled batch handoff, FD/Surface/resource ownership. Tests `stale_handle`, `double_close`, `invalid_payload`, `mutate_after_handoff`, `pool_reuse_after_cancel`, `snapshot_alias` не должны крашить процесс, менять published snapshots или удерживать Activity. Coroutines confinement и immutable backing проверяются явно, без предположения о защите со стороны языка.
-- [ ] F04.4 Реализовать save watermark/unsaved state, Activity rotation/resize/background/process restore; `SurfaceEpoch` и acknowledged teardown. Lifecycle tests во время commit/recreate не теряют durable prefix.
-- [ ] F04.5 Добавить Android baseline screens с Kotlin AppGateway/session connection; progress/save/error states и отказ ввода при pending overflow, без UI thread blocking. Profile callback durations.
+- [x] F04.1 Реализовать executor ownership, byte admission и отдельные очереди durable/input/latest-view/control. Tests `overflow_policies`, `durable_order`, `no_starvation`, `shutdown_pending`, `stale_session` проверяют все caps/terminal events.
+- [x] F04.2 Создать MemoryGovernor/reservations и limited worker pool; tests `pins_counted`, `cancel_releases`, `lease_budget`. Не создавать thread/executor на feature/session.
+- [x] F04.3 Реализовать Kotlin typed transport/pooled batch handoff, FD/Surface/resource ownership. Tests `stale_handle`, `double_close`, `invalid_payload`, `mutate_after_handoff`, `pool_reuse_after_cancel`, `snapshot_alias` не должны крашить процесс, менять published snapshots или удерживать Activity. Coroutines confinement и immutable backing проверяются явно, без предположения о защите со стороны языка.
+- [x] F04.4 Реализовать save watermark/unsaved state, Activity rotation/resize/background/process restore; `SurfaceEpoch` и acknowledged teardown. Lifecycle tests во время commit/recreate не теряют durable prefix.
+- [x] F04.5 Добавить Android baseline screens с Kotlin AppGateway/session connection; progress/save/error states и отказ ввода при pending overflow, без UI thread blocking. Profile callback durations.
 
 **Gate:** runtime/platform suites PASS; instrumented ≥100 rotation/surface cycles и kill/reopen сохраняют durable hashes; очередь overflow даёт явный статус; no leaked Activity/Surface/buffer leases. JVM protocols — deterministic coroutine tests и stress/linearizability checks; native зависимости — поддержанный sanitizer/debug build. Все tests/assemble/lint из правил проходят.
 

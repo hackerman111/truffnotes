@@ -11,7 +11,7 @@ object ArchitectureVerifier {
     )
 
     private val ALLOWED_INTERNAL_TARGETS_FOR_FEATURES = setOf(":tn-core", ":tn-test-support")
-    private val RUNTIME_OR_APP_MODULES = setOf("tn-runtime", "tn-platform", "tn-ui", "app")
+    private val RUNTIME_OR_APP_MODULES = setOf("tn-runtime", "app")
 
     /**
      * Inspects a Gradle workspace directory (either the production root or a temporary fixture project)

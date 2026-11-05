@@ -117,3 +117,23 @@ value class RequestGeneration(val value: Long) {
     }
     override fun toString(): String = value.toString()
 }
+
+@Serializable
+@JvmInline
+value class SurfaceEpoch(val value: Long) {
+    init {
+        require(value >= 0L) { "SurfaceEpoch must be non-negative: $value" }
+    }
+    fun next(): SurfaceEpoch = SurfaceEpoch(value + 1L)
+    override fun toString(): String = value.toString()
+}
+
+@Serializable
+@JvmInline
+value class ResizeGeneration(val value: Long) {
+    init {
+        require(value >= 0L) { "ResizeGeneration must be non-negative: $value" }
+    }
+    fun next(): ResizeGeneration = ResizeGeneration(value + 1L)
+    override fun toString(): String = value.toString()
+}
