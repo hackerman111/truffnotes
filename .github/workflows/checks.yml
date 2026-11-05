@@ -1,0 +1,29 @@
+name: Truffnotes Verification Checks
+
+on:
+  push:
+    branches: [ main, "feat/**" ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  jvm-and-architecture-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Verify F00 Manifest
+        run: python3 tools/spikes/check_manifest.py
+
+      - name: Run Architecture, API, and Requirements Checks
+        run: ./gradlew ktlintCheck detekt architectureCheck apiCheck requirementsCheck
+
+      - name: Run All JVM Unit Tests
+        run: ./gradlew jvmTestAll

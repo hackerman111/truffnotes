@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "phase": "F01",
+  "frozen_at": "2026-11-05",
+  "seed": 20261105,
+  "cases": [
+    {
+      "id": "R01.core-jvm-isolation",
+      "parent_requirement": "R01",
+      "source_section": "android-workspace.md 3-4, 6",
+      "title": ":tn-core is pure JVM without Android/SQL dependencies and enforces strict module boundary",
+      "owner_phase": "F01",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-test-support/src/test/kotlin/inkspace/testsupport/TestSupportAndArchitectureTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F01/report.md"
+    },
+    {
+      "id": "R28.typed-ids-and-version-model",
+      "parent_requirement": "R28",
+      "source_section": "android-workspace.md 5-6",
+      "title": "Distinct 128-bit typed IDs, monotonic Revision, Applied vs Durable distinction, EditPlan validation",
+      "owner_phase": "F01",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-core/src/test/kotlin/inkspace/core/F01ContractTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F01/report.md"
+    },
+    {
+      "id": "R31.wire-codec-and-nonfinite-rejection",
+      "parent_requirement": "R31",
+      "source_section": "android-workspace.md 5",
+      "title": "CBOR/JSON serialization golden roundtrip, coordinate roundtrip <=0.01pt, NaN/Infinity wire rejection",
+      "owner_phase": "F01",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-core/src/test/kotlin/inkspace/core/F01ContractTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F01/report.md"
+    },
+    {
+      "id": "R34.gradle-verification-gates",
+      "parent_requirement": "R34",
+      "source_section": "ai-execution.md 5",
+      "title": "Root tasks architectureCheck, apiCheck, requirementsCheck, jvmTestAll, ktlintCheck, detekt and negative fixture checks",
+      "owner_phase": "F01",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "build.gradle.kts",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F01/report.md"
+    }
+  ]
+}

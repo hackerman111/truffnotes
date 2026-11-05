@@ -159,10 +159,10 @@ W4 — stress, не обещание 60 FPS при 10000 одновременн�
 
 **API:** types/interfaces из архитектуры: DocumentRead/EditPlan/Mutation/ChangeSet/Limits/Outcome/actions/versions; AppliedRevision и DurableRevision различны. Test-support: bounded fake ports/test scheduler. Core API dump содержит только immutable/encapsulated public data.
 
-- [ ] F01.1 Создать Gradle modules core/test-support/build-logic; typed IDs/units/errors/finite coordinates/limits, serialization/CBOR boundary. Contract tests `id_types`, `coordinate_roundtrip`, `limits`, `wire_rejects_nonfinite` проверяют несовместимые ID, inverse transform error ≤0.01pt и NaN/Inf rejection.
-- [ ] F01.2 Определить typed payloads Notebook/Canvas, brush/shape/text/asset references и порты. Сгенерировать независимые fixtures v1; compile/serialization golden tests проверяют стабильность и unsupported required feature.
-- [ ] F01.3 Реализовать `architectureCheck`, `apiCheck`, `requirementsCheck`, агрегаторы `jvmTestAll`/`androidUnitTestAll`, Detekt/ktlint; добавить отрицательные temporary fixture Gradle projects: api/implementation/test/variant/composite-build forbidden edge → FAIL. Не нарушать основной Gradle project ради проверки.
-- [ ] F01.4 Зафиксировать публичный контракт, thread semantics, errors/cancellation/overflow. Core не содержит SQL/Canvas/Android и heavy implementations; добавить проверку запрещённых imports/dependencies.
+- [x] F01.1 Создать Gradle modules core/test-support/build-logic; typed IDs/units/errors/finite coordinates/limits, serialization/CBOR boundary. Contract tests `id_types`, `coordinate_roundtrip`, `limits`, `wire_rejects_nonfinite` проверяют несовместимые ID, inverse transform error ≤0.01pt и NaN/Inf rejection.
+- [x] F01.2 Определить typed payloads Notebook/Canvas, brush/shape/text/asset references и порты. Сгенерировать независимые fixtures v1; compile/serialization golden tests проверяют стабильность и unsupported required feature.
+- [x] F01.3 Реализовать `architectureCheck`, `apiCheck`, `requirementsCheck`, агрегаторы `jvmTestAll`/`androidUnitTestAll`, Detekt/ktlint; добавить отрицательные temporary fixture Gradle projects: api/implementation/test/variant/composite-build forbidden edge → FAIL. Не нарушать основной Gradle project ради проверки.
+- [x] F01.4 Зафиксировать публичный контракт, thread semantics, errors/cancellation/overflow. Core не содержит SQL/Canvas/Android и heavy implementations; добавить проверку запрещённых imports/dependencies.
 
 **Gate:** `rtk proxy ./gradlew :tn-core:test :tn-test-support:test`, Gradle checks из правил и CI → PASS. Новая запрещённая edge/изменение API без version update детектируются тестом. Core contracts читаются отдельно от реализации любой feature.
 

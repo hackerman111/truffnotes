@@ -1,0 +1,250 @@
+val cbor: Cbor = Cbor {
+val json: Json = Json {
+val value = cbor.decodeFromByteArray<T>(bytes)
+val value = json.decodeFromString<T>(jsonString)
+sealed interface CoreError
+sealed interface EditError : CoreError {
+data class PreconditionFailed(val message: String) : EditError
+data class LimitExceeded(val limit: String, val current: Long, val max: Long) : EditError
+data class EntityNotFound(val id: String) : EditError
+data class NonFiniteCoordinate(val coordinate: String) : EditError
+data class CycleDetected(val groupId: String) : EditError
+data class LockedEntity(val id: String) : EditError
+data class StaleRevision(val expected: Long, val actual: Long) : EditError
+data class InvalidPayload(val reason: String) : EditError
+data class SerializationError(val message: String, val cause: String? = null) : CoreError
+sealed interface GeometryError : CoreError {
+data class ComputationFailed(val reason: String) : GeometryError
+sealed interface TextError : CoreError {
+data class ShapingFailed(val reason: String) : TextError
+sealed interface ResourceError : CoreError {
+data class ResourceNotFound(val key: String) : ResourceError
+data class ResourceExhausted(val reason: String) : ResourceError
+sealed interface StorageError : CoreError {
+data class IoFailure(val message: String) : StorageError
+data class TransactionAborted(val reason: String) : StorageError
+sealed interface SubmitError : CoreError {
+data class QueueOverflow(val currentDepth: Int, val maxDepth: Int) : SubmitError
+data class ShutdownInProgress(val message: String) : SubmitError
+value class DocumentId(val value: String) {
+value class SpaceId(val value: String) {
+value class PageId(val value: String) {
+value class LayerId(val value: String) {
+value class ObjectId(val value: String) {
+value class AssetId(val value: String) {
+value class VersionId(val value: String) {
+value class GestureId(val value: String) {
+value class UndoLabel(val value: String) {
+value class TransactionId(val value: String) {
+value class Revision(val value: Long) : Comparable<Revision> {
+fun next(): Revision = Revision(value + 1L)
+value class SessionEpoch(val value: Long) {
+value class RequestGeneration(val value: Long) {
+data class Limits(
+val maxObjectsPerSpace: Int = 10_000,
+val maxGroupDepth: Int = 32,
+val maxPayloadBytes: Long = 100_000_000L,
+val maxStrokeSamplesPerChunk: Int = 64_000,
+val maxTextChars: Int = 1_000_000
+enum class DocumentKind {
+data class DocVersion(
+val document: DocumentId,
+val revision: Revision
+data class SessionKey(
+val document: DocumentId,
+val epoch: SessionEpoch
+data class JobStamp(
+val session: SessionKey,
+val resource: String,
+val contentVersion: Long,
+val generation: RequestGeneration
+sealed interface Mutation
+data class InsertObject(
+val space: SpaceId,
+val layer: LayerId,
+val id: ObjectId,
+val payload: ObjectPayload,
+val bounds: DocRect
+data class RemoveObject(
+val id: ObjectId
+data class UpdatePayload(
+val id: ObjectId,
+val newPayload: ObjectPayload,
+val newBounds: DocRect
+data class MoveObject(
+val id: ObjectId,
+val deltaX: Double,
+val deltaY: Double
+data class Precondition(
+val id: String,
+val expectedVersion: Long
+data class EditPlan(
+val base: DocVersion,
+val preconditions: List<Precondition> = emptyList(),
+val mutations: List<Mutation>,
+val gesture: GestureId,
+val label: UndoLabel
+class ValidatedPlan internal constructor(val plan: EditPlan)
+data class ChangeSet(
+val changedIds: Set<ObjectId>,
+val oldBounds: DocRect? = null,
+val newBounds: DocRect? = null
+data class AppliedEdit(
+val revision: Revision,
+val changeSet: ChangeSet,
+val inversePlan: EditPlan
+fun validatePlan(document: DocumentRead, plan: EditPlan, limits: Limits): Outcome<ValidatedPlan, EditError> {
+val state = document.objectState(ObjectId(precondition.id))
+val existing = document.objectState(mutation.id)
+val state = document.objectState(mutation.id)
+val state = document.objectState(mutation.id)
+val state = document.objectState(mutation.id)
+val totalObjects = document.totalObjectCount + pendingInserts
+sealed interface Outcome<out T, out E> {
+val isSuccess: Boolean
+val isFailure: Boolean
+fun getOrNull(): T? = when (this) {
+fun errorOrNull(): E? = when (this) {
+data class Success<out T>(val value: T) : Outcome<T, Nothing> {
+data class Failure<out E>(val error: E) : Outcome<Nothing, E> {
+sealed interface ObjectPayload
+data class StrokePayload(
+val brushId: String,
+val color: Int,
+val baseWidthPt: Double,
+val origin: DocPoint,
+val samples: List<StrokeSamplePoint>,
+val smoothingVersion: Int = 1
+data class StrokeSamplePoint(
+val relX: Float,
+val relY: Float,
+val pressure: Float = 0.5f,
+val tilt: Float = 0.0f,
+val timeDeltaMs: Int = 0
+data class ShapePayload(
+val shapeType: ShapeType,
+val strokeColor: Int,
+val fillColor: Int? = null,
+val strokeWidthPt: Double = 1.0
+enum class ShapeType {
+data class ConnectorPayload(
+val sourceId: ObjectId,
+val targetId: ObjectId,
+val strokeColor: Int,
+val strokeWidthPt: Double = 1.0,
+val isDirected: Boolean = true
+data class TextPayload(
+val text: String,
+val fontSizePt: Double = 12.0,
+val fontColor: Int = 0xFF000000.toInt(),
+val isRtl: Boolean = false,
+val runs: List<TextRun> = emptyList()
+data class TextRun(
+val start: Int,
+val end: Int,
+val bold: Boolean = false,
+val italic: Boolean = false,
+val underline: Boolean = false,
+val color: Int? = null
+data class ImagePayload(
+val asset: AssetId,
+val naturalWidthPx: Int,
+val naturalHeightPx: Int,
+val cropRect: DocRect? = null
+data class GroupPayload(
+val members: List<ObjectId>
+data class StickyPayload(
+val color: Int,
+val content: String,
+val isCollapsed: Boolean = false
+data class TapePayload(
+val patternColor: Int,
+val opacity: Float = 0.8f
+data class LinkAnchorPayload(
+val title: String,
+val targetPage: PageId? = null,
+val targetUrl: String? = null
+data class GeometryRequest(
+val strokeId: ObjectId,
+val origin: DocPoint,
+val samples: List<DocPoint>,
+val baseWidthPt: Double
+data class PathArtifact(
+val strokeId: ObjectId,
+val bounds: DocRect,
+val segmentCount: Int
+data class TextLayoutRequest(
+val text: String,
+val fontSizePt: Double,
+val maxWidthPt: Double,
+val isRtl: Boolean = false
+data class TextLayout(
+val widthPt: Double,
+val heightPt: Double,
+val lineCount: Int
+data class ResourceRequest(
+val asset: AssetId,
+val byteBudget: Long
+data class ResourceLease(
+val asset: AssetId,
+val sizeBytes: Long,
+val isAvailable: Boolean
+sealed interface StorageRequest {
+data class Commit(
+val revision: Revision,
+val payloadBytes: Long
+value class RequestId(val value: Long)
+sealed interface PdfRequest {
+data class RenderPage(val pageIndex: Int, val width: Int, val height: Int) : PdfRequest
+sealed interface RenderJob {
+data class Draw(val bounds: DocRect, val revision: Revision) : RenderJob
+data class Snapshot(val region: DocRect, val scale: Float) : RenderJob
+data class JobSpec(
+val jobId: String,
+val priority: Int
+value class JobId(val value: String)
+interface GeometryPort {
+fun paths(request: GeometryRequest): Outcome<PathArtifact, GeometryError>
+interface TextPort {
+fun layout(request: TextLayoutRequest): Outcome<TextLayout, TextError>
+interface ResourcePort {
+fun read(request: ResourceRequest): Outcome<ResourceLease, ResourceError>
+interface StoragePort {
+fun trySubmit(request: StorageRequest): Outcome<RequestId, SubmitError>
+interface PdfPort {
+fun trySubmit(request: PdfRequest): Outcome<RequestId, SubmitError>
+interface RenderPort {
+fun trySubmit(job: RenderJob): Outcome<RequestId, SubmitError>
+interface JobSink {
+fun trySubmit(job: JobSpec): Outcome<JobId, SubmitError>
+enum class ResidencyState {
+interface DocumentRead {
+val version: DocVersion
+val totalObjectCount: Int
+fun objectState(id: ObjectId): ResidencyState
+fun isLocked(id: ObjectId): Boolean
+fun getObjectPayload(id: ObjectId): ObjectPayload?
+fun queryBounds(rect: DocRect): List<ObjectId>
+data class DocPoint(val x: Double, val y: Double) {
+data class DocRect(
+val left: Double,
+val top: Double,
+val right: Double,
+val bottom: Double
+val width: Double get() = right - left
+val height: Double get() = bottom - top
+fun contains(point: DocPoint): Boolean {
+fun intersects(other: DocRect): Boolean {
+value class ViewPx(val value: Float) {
+value class DocUnits(val points: Double) {
+data class ViewPoint(val x: Double, val y: Double) {
+data class CameraTransform(
+val scale: Double = 1.0,
+val translateX: Double = 0.0,
+val translateY: Double = 0.0
+fun docToView(doc: DocPoint): ViewPoint {
+val vx = (doc.x * scale) + translateX
+val vy = (doc.y * scale) + translateY
+fun viewToDoc(view: ViewPoint): DocPoint {
+val dx = (view.x - translateX) / scale
+val dy = (view.y - translateY) / scale
