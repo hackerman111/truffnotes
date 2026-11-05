@@ -1,0 +1,54 @@
+{
+  "phase": "F06",
+  "title": "Реальный рукописный ввод (:tn-ink, :tn-platform, :tn-runtime)",
+  "seed": 20261105,
+  "requirements_verified": [
+    "R06",
+    "R07",
+    "acceptance19",
+    "acceptance20",
+    "acceptance21",
+    "acceptance45",
+    "acceptance46"
+  ],
+  "requirements_contributed": [
+    "R13",
+    "R31"
+  ],
+  "test_suites": [
+    {
+      "suite": "inkspace.ink.F06ReplayFixturesAndBrushesTest",
+      "cases": [
+        "replay_corpus_fixtures_preserve_real_samples_and_never_commit_predicted_or_canceled",
+        "mixed_finger_and_pen_palm_rejection_and_stylus_only_policy",
+        "temporary_eraser_button_and_hover_overlay_and_missing_axes_fallback",
+        "all_5_brush_kinds_end_caps_line_patterns_corner_preservation_and_8192_origin_rebasing",
+        "long_stroke_exceeding_resident_window_by_10x_spools_and_commits_single_undo_or_aborts_on_disk_full"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.platform.F06MotionEventAdapterTest",
+      "cases": [
+        "extracts_historical_points_pressure_tilt_distance_and_buttons_for_stylus",
+        "missing_pressure_or_tilt_axes_fallback_and_passive_stylus_honest_touch_classification",
+        "hover_move_and_exit_extract_hover_overlay_without_committing_stroke",
+        "action_cancel_and_flag_canceled_mark_pointer_canceled_in_extracted_batch",
+        "leased_ink_input_batch_does_not_expose_backing_arrays_after_handoff",
+        "real_android_motion_event_adapter_handles_down_move_up_and_cancel",
+        "palm_rejection_multi_pointer_event_preserves_stylus_while_finger_touch_arrives"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.runtime.F06InkRuntimeIntegrationAndLatencyTest",
+      "cases": [
+        "stylus_stroke_writes_draft_then_commits_identical_pixels_and_remains_vector_editable_after_reopen_and_undo",
+        "cancel_and_predicted_samples_leave_zero_phantom_strokes_and_zero_saved_predictions",
+        "pen_plus_save_plus_scroll_has_zero_main_io_and_w1_meets_all_latency_budgets"
+      ],
+      "raw_profile_path": "docs/evidence/F06/w1-ink-latency-raw.json",
+      "status": "PASS"
+    }
+  ]
+}

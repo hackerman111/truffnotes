@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "phase": "F06",
+  "seed": 20261105,
+  "fixtures": [
+    {
+      "id": "historical_points",
+      "description": "MotionEvent batch with historical samples followed by current sample; all RealSamples preserved in chronological order",
+      "expected_committed_strokes": 1,
+      "expected_total_real_samples": 6,
+      "expected_predicted_saved_samples": 0
+    },
+    {
+      "id": "pointer_reuse",
+      "description": "OS reuses pointerId=0 across consecutive strokes and after CANCEL without cross-contaminating stroke IDs or samples",
+      "expected_committed_strokes": 2,
+      "expected_total_real_samples": 6,
+      "expected_predicted_saved_samples": 0
+    },
+    {
+      "id": "mixed_finger_pen",
+      "description": "Multi-pointer stream where finger/palm pointerId=0 touches and cancels while active stylus pointerId=1 draws and commits intact",
+      "expected_committed_strokes": 1,
+      "expected_total_real_samples": 4,
+      "expected_predicted_saved_samples": 0
+    },
+    {
+      "id": "cancel_stream",
+      "description": "ACTION_CANCEL terminates active touch stream; draft is discarded, provisional spool is cleared, 0 phantom strokes committed",
+      "expected_committed_strokes": 0,
+      "expected_total_real_samples": 0,
+      "expected_predicted_saved_samples": 0
+    },
+    {
+      "id": "flag_canceled",
+      "description": "Per-pointer FLAG_CANCELED cancels only the flagged pointer draft without affecting another pointer's completed or active stroke",
+      "expected_committed_strokes": 1,
+      "expected_total_real_samples": 4,
+      "expected_predicted_saved_samples": 0
+    },
+    {
+      "id": "axes_missing",
+      "description": "Passive touch / capacitive pen without pressure or tilt axes honestly reports supportsPressure=false, supportsTilt=false, isPassiveTouch=true",
+      "expected_committed_strokes": 1,
+      "expected_total_real_samples": 4,
+      "expected_predicted_saved_samples": 0
+    },
+    {
+      "id": "long_stroke",
+      "description": "Continuous stroke exceeding resident window by >=10x spools older chunks to provisional staging and commits as 1 logical Undo step; DiskFull aborts explicitly without silent truncation",
+      "expected_committed_strokes": 1,
+      "expected_min_window_multiplier": 10,
+      "expected_predicted_saved_samples": 0
+    },
+    {
+      "id": "prediction_replaced",
+      "description": "MOVE batches include PredictedSamples alongside RealSamples; prediction appears only in ephemeral overlay, is replaced on next batch, and is 100% absent from committed EditPlan/DB/Undo",
+      "expected_committed_strokes": 1,
+      "expected_total_real_samples": 5,
+      "expected_predicted_saved_samples": 0
+    }
+  ]
+}

@@ -82,3 +82,14 @@ sealed interface RenderError : CoreError {
     data class TextLayoutFailure(val objectId: String, val reason: String) : RenderError
     data class ResourceFailure(val assetId: String, val reason: String) : RenderError
 }
+
+sealed interface InputError : CoreError {
+    data class InvalidSample(val index: Int, val reason: String) : InputError
+    data class StaleSequence(val pointerId: Int, val expectedMinSeq: Long, val actualSeq: Long) : InputError
+    data class PalmRejected(val pointerId: Int, val reason: String) : InputError
+    data class StylusOnlyIgnored(val pointerId: Int, val reason: String) : InputError
+    data class LockedTarget(val layerId: String, val reason: String) : InputError
+    data class SpoolFailed(val strokeId: String, val reason: String) : InputError
+    data class MemoryWindowExceeded(val requestedBytes: Long, val maxWindowBytes: Long) : InputError
+    data class SessionNotActive(val session: String, val reason: String) : InputError
+}

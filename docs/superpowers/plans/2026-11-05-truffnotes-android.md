@@ -227,11 +227,11 @@ W4 — stress, не обещание 60 FPS при 10000 одновременн�
 
 **API:** `InkEngine.ingest(batch: InputBatch, ctx: InputContext): Outcome<InkOutput, InputError>`; GeometryPort.paths для всех brush kinds. RealSample и PredictedSample — разные core types; InputBatch lease не выдаёт mutable backing после handoff.
 
-- [ ] F06.1 Добавить replay fixtures `historical_points`, `pointer_reuse`, `mixed_finger_pen`, `cancel_stream`, `flag_canceled`, `axes_missing`, `long_stroke`, `prediction_replaced`. Assertions: реальные samples сохраняются в порядке, canceled draft не записан, prediction отсутствует в DB/Undo.
-- [ ] F06.2 Реализовать обработку all Android touch actions/hover/history/buttons/axes с capability/fallback. Palm input не отменяет завершённый stroke другого pointer. Passive pen честно определяется как touch.
-- [ ] F06.3 Реализовать Ball/Fountain/Brush/Pencil/Highlighter через один versioned pipeline: smoothing preserves intentional corners, pressure/tilt, ends/style/pattern/opacity. Длинный logical stroke имеет resident window≤8MiB, старые chunks spool-ятся в provisional store staging без revision, UP публикует refs одним Undo, CANCEL делает staging collectible. Test `long_stroke` превышает window минимум в10раз, проверяет bounded RAM и полную последовательность real samples после reload; diskfull spool не превращается в тихое усечение линии.
-- [ ] F06.4 Подключить draft renderer и core commit/Undo/store; геометрия черновика и финала совпадает на реальных samples. Протестировать pen+save+scroll без Main I/O.
-- [ ] F06.5 Проверить stylus-only/finger-draw/navigation, temporary eraser button и hover на D1/D2. Показать capability отсутствие pressure/tilt, а не искусственные fake readings.
+- [x] F06.1 Добавить replay fixtures `historical_points`, `pointer_reuse`, `mixed_finger_pen`, `cancel_stream`, `flag_canceled`, `axes_missing`, `long_stroke`, `prediction_replaced`. Assertions: реальные samples сохраняются в порядке, canceled draft не записан, prediction отсутствует в DB/Undo.
+- [x] F06.2 Реализовать обработку all Android touch actions/hover/history/buttons/axes с capability/fallback. Palm input не отменяет завершённый stroke другого pointer. Passive pen честно определяется как touch.
+- [x] F06.3 Реализовать Ball/Fountain/Brush/Pencil/Highlighter через один versioned pipeline: smoothing preserves intentional corners, pressure/tilt, ends/style/pattern/opacity. Длинный logical stroke имеет resident window≤8MiB, старые chunks spool-ятся в provisional store staging без revision, UP публикует refs одним Undo, CANCEL делает staging collectible. Test `long_stroke` превышает window минимум в10раз, проверяет bounded RAM и полную последовательность real samples после reload; diskfull spool не превращается в тихое усечение линии.
+- [x] F06.4 Подключить draft renderer и core commit/Undo/store; геометрия черновика и финала совпадает на реальных samples. Протестировать pen+save+scroll без Main I/O.
+- [x] F06.5 Проверить stylus-only/finger-draw/navigation, temporary eraser button и hover на D1/D2. Показать capability отсутствие pressure/tilt, а не искусственные fake readings.
 
 **Gate:** ink/transport/replay suites PASS; real stylus tests D1/D2; W1 callback/ingest/durable/pen latency gates выполнены, 0 phantom strokes при CANCEL и 0 предсказанных saved points. Результат можно снова открыть и редактировать как vectors.
 

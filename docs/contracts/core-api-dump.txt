@@ -84,6 +84,15 @@ val maxBytes: Long
 data class GeometryFailure(val strokeId: String, val reason: String) : RenderError
 data class TextLayoutFailure(val objectId: String, val reason: String) : RenderError
 data class ResourceFailure(val assetId: String, val reason: String) : RenderError
+sealed interface InputError : CoreError {
+data class InvalidSample(val index: Int, val reason: String) : InputError
+data class StaleSequence(val pointerId: Int, val expectedMinSeq: Long, val actualSeq: Long) : InputError
+data class PalmRejected(val pointerId: Int, val reason: String) : InputError
+data class StylusOnlyIgnored(val pointerId: Int, val reason: String) : InputError
+data class LockedTarget(val layerId: String, val reason: String) : InputError
+data class SpoolFailed(val strokeId: String, val reason: String) : InputError
+data class MemoryWindowExceeded(val requestedBytes: Long, val maxWindowBytes: Long) : InputError
+data class SessionNotActive(val session: String, val reason: String) : InputError
 value class DocumentId(val value: String) {
 value class SpaceId(val value: String) {
 value class PageId(val value: String) {
@@ -102,6 +111,149 @@ value class SurfaceEpoch(val value: Long) {
 fun next(): SurfaceEpoch = SurfaceEpoch(value + 1L)
 value class ResizeGeneration(val value: Long) {
 fun next(): ResizeGeneration = ResizeGeneration(value + 1L)
+data class RealSample(
+val x: Float,
+val y: Float,
+val pressure: Float = 0.5f,
+val tilt: Float = 0.0f,
+val timestampMs: Long = 0L
+data class PredictedSample(
+val x: Float,
+val y: Float,
+val pressure: Float = 0.5f,
+val tilt: Float = 0.0f,
+val timestampMs: Long = 0L
+enum class InputToolType {
+data class InputCapabilityReport(
+val toolType: InputToolType,
+val supportsPressure: Boolean,
+val supportsTilt: Boolean,
+val isPassiveTouch: Boolean
+class InputBatch private constructor(
+val session: SessionKey,
+val pointerId: Int,
+val sequenceNumber: Long,
+val action: InputActionKind,
+val toolType: InputToolType,
+val supportsPressure: Boolean,
+val supportsTilt: Boolean,
+val primaryButtonPressed: Boolean,
+val secondaryEraserButtonPressed: Boolean,
+val isFlagCanceled: Boolean,
+val realSampleCount: Int,
+val predictedSampleCount: Int,
+val byteSize: Int,
+val isEffectiveCancel: Boolean
+val capabilityReport: InputCapabilityReport
+fun realX(index: Int): Float {
+fun realY(index: Int): Float {
+fun realPressure(index: Int): Float {
+fun realTilt(index: Int): Float {
+fun realTimestampMs(index: Int): Long {
+fun realSampleAt(index: Int): RealSample {
+fun predictedX(index: Int): Float {
+fun predictedY(index: Int): Float {
+fun predictedSampleAt(index: Int): PredictedSample {
+fun toImmutableInputBatch(maxBatchBytes: Int = 64 * 1024): Outcome<ImmutableInputBatch, SubmitError> {
+val effectiveAction = if (isFlagCanceled) InputActionKind.CANCEL else action
+fun fromImmutableBatch(
+val count = batch.sampleCount
+val rXs = FloatArray(count)
+val rYs = FloatArray(count)
+val rPs = FloatArray(count)
+val rTs = FloatArray(count)
+val rTime = LongArray(count)
+val pCount = predictedSamples.size
+val pXs = FloatArray(pCount)
+val pYs = FloatArray(pCount)
+val pPs = FloatArray(pCount)
+val pTs = FloatArray(pCount)
+val pTime = LongArray(pCount)
+val p = predictedSamples[i]
+val totalBytes = ImmutableInputBatch.BATCH_HEADER_BYTES +
+fun fromSamples(
+val rCount = realSamples.size
+val pCount = predictedSamples.size
+val totalBytes = ImmutableInputBatch.BATCH_HEADER_BYTES +
+val rXs = FloatArray(rCount)
+val rYs = FloatArray(rCount)
+val rPs = FloatArray(rCount)
+val rTs = FloatArray(rCount)
+val rTime = LongArray(rCount)
+val s = realSamples[i]
+val pXs = FloatArray(pCount)
+val pYs = FloatArray(pCount)
+val pPs = FloatArray(pCount)
+val pTs = FloatArray(pCount)
+val pTime = LongArray(pCount)
+val p = predictedSamples[i]
+enum class BrushKind(val canonicalId: String) {
+fun fromBrushId(brushId: String): BrushKind {
+val prefix = brushId.substringBefore(':').lowercase(Locale.US)
+enum class StrokeEndCap {
+enum class StrokeLinePattern {
+data class BrushSpec(
+val kind: BrushKind = BrushKind.BALL,
+val colorArgb: Int = 0xFF000000.toInt(),
+val baseWidthPt: Double = 2.0,
+val opacity: Float = 1.0f,
+val smoothingVersion: Int = 1,
+val smoothingStrength: Float = 0.5f,
+val pressureSensitivity: Float = 0.6f,
+val tiltSensitivity: Float = 0.3f,
+val endCap: StrokeEndCap = when (kind) {
+val linePattern: StrokeLinePattern = StrokeLinePattern.SOLID
+fun toBrushIdString(): String {
+fun fromBrushIdString(
+val kind = BrushKind.fromBrushId(brushId)
+val parts = brushId.split(':')
+val kv = parts[i].split('=', limit = 2)
+data class StylusInputPolicy(
+val stylusOnlyDrawing: Boolean = false,
+val palmRejectionEnabled: Boolean = true,
+val temporaryEraserButtonEnabled: Boolean = true,
+val palmRejectionWindowMs: Long = 300L
+enum class EffectiveInkToolMode {
+data class StagedChunkRef(
+val strokeId: ObjectId,
+val chunkIndex: Int,
+val sampleCount: Int,
+val byteSize: Int,
+val origin: DocPoint
+data class SpooledStrokeChunk(
+val ref: StagedChunkRef,
+val samples: List<StrokeSamplePoint>
+val frozenSamples: List<StrokeSamplePoint> = java.util.List.copyOf(samples)
+interface StrokeSpoolSink {
+fun spoolChunk(
+fun readSpooledChunks(refs: List<StagedChunkRef>): Outcome<List<SpooledStrokeChunk>, InputError>
+fun discardSpooledChunks(strokeId: ObjectId)
+data class InputContext(
+val docVersion: DocVersion,
+val activeSpaceId: SpaceId = SpaceId("space-1"),
+val activePageId: PageId = PageId("page-1"),
+val activeLayerId: LayerId = LayerId("layer-1"),
+val isLayerLocked: Boolean = false,
+val camera: CameraTransform = CameraTransform(),
+val brush: BrushSpec = BrushSpec(),
+val policy: StylusInputPolicy = StylusInputPolicy(),
+val maxResidentWindowBytes: Long = MemoryCategory.DRAFT_STROKE_WINDOW.defaultCapBytes,
+val maxSamplesPerResidentChunk: Int = 2048
+data class InkOutput(
+val pointerId: Int,
+val strokeEpoch: Long,
+val effectiveToolMode: EffectiveInkToolMode,
+val capabilityReport: InputCapabilityReport,
+val draftStroke: DraftStrokeSceneItem? = null,
+val predictedOverlay: EphemeralOverlayItem.LaserTrail? = null,
+val hoverOverlay: EphemeralOverlayItem.HoverCursor? = null,
+val navigationDeltaDoc: DocPoint? = null,
+val commitPlan: EditPlan? = null,
+val spooledChunkRefs: List<StagedChunkRef> = emptyList(),
+val residentWindowBytes: Long = 0L,
+val residentSampleCount: Int = 0,
+val totalRealSamplesIngested: Int = 0
+val frozenSpooledChunkRefs: List<StagedChunkRef> = java.util.List.copyOf(spooledChunkRefs)
 data class Limits(
 val maxObjectsPerSpace: Int = 10_000,
 val maxGroupDepth: Int = 32,

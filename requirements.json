@@ -97,8 +97,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f06",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-platform/src/test/kotlin/inkspace/platform/F06MotionEventAdapterTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F06/report.md"
     },
     {
@@ -113,8 +113,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f06",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-ink/src/test/kotlin/inkspace/ink/F06ReplayFixturesAndBrushesTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F06/report.md"
     },
     {
@@ -942,8 +942,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f06",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F06InkRuntimeIntegrationAndLatencyTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F06/report.md"
     },
     {
@@ -959,8 +959,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f06",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-ink/src/test/kotlin/inkspace/ink/F06ReplayFixturesAndBrushesTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F06/report.md"
     },
     {
@@ -976,8 +976,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f06",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F06InkRuntimeIntegrationAndLatencyTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F06/report.md"
     },
     {
@@ -1376,8 +1376,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f06",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F06InkRuntimeIntegrationAndLatencyTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F06/report.md"
     },
     {
@@ -1393,8 +1393,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f06",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-ink/src/test/kotlin/inkspace/ink/F06ReplayFixturesAndBrushesTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F06/report.md"
     },
     {

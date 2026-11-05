@@ -1,7 +1,11 @@
 package inkspace.platform
 
+import android.view.InputDevice
 import android.view.MotionEvent
 import inkspace.core.error.SubmitError
+import inkspace.core.ink.InputBatch
+import inkspace.core.ink.InputToolType
+import inkspace.core.ink.PredictedSample
 import inkspace.core.model.SessionKey
 import inkspace.core.outcome.Outcome
 import inkspace.core.runtime.ImmutableInputBatch
@@ -10,6 +14,51 @@ import inkspace.core.unit.MAX_WORLD_COORDINATE_PT
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
+
+/**
+ * Hardware axis support descriptor for an input device/pointer.
+ * Prevents fabricating fake pressure or tilt readings when the device/tool does not report them.
+ */
+data class DeviceAxisCapabilities(
+    val supportsPressure: Boolean,
+    val supportsTilt: Boolean
+) {
+    companion object {
+        fun fromInputDevice(device: InputDevice?, toolType: InputToolType): DeviceAxisCapabilities {
+            if (toolType == InputToolType.FINGER) {
+                // Passive capacitive stylus / finger touch is honestly reported without synthetic pressure/tilt
+                return DeviceAxisCapabilities(supportsPressure = false, supportsTilt = false)
+            }
+            if (device == null) {
+                val isActiveStylus = toolType == InputToolType.STYLUS || toolType == InputToolType.ERASER
+                return DeviceAxisCapabilities(
+                    supportsPressure = isActiveStylus,
+                    supportsTilt = isActiveStylus
+                )
+            }
+            val hasPressure = device.getMotionRange(MotionEvent.AXIS_PRESSURE) != null
+            val hasTilt = device.getMotionRange(MotionEvent.AXIS_TILT) != null
+            return DeviceAxisCapabilities(
+                supportsPressure = hasPressure,
+                supportsTilt = hasTilt
+            )
+        }
+    }
+}
+
+/**
+ * Lease wrapping a handed-off [LeasedInputBatch] together with its typed [InputBatch] for `:tn-ink`.
+ */
+class LeasedInkInputBatch internal constructor(
+    val leasedBatch: LeasedInputBatch,
+    val inkBatch: InputBatch
+) : AutoCloseable {
+    fun isClosed(): Boolean = leasedBatch.isClosed()
+
+    override fun close() {
+        leasedBatch.close()
+    }
+}
 
 /**
  * Lease wrapping a handed-off ImmutableInputBatch together with its pooled slot release callback.
@@ -386,5 +435,148 @@ class InputTransport(
             return currentRes
         }
         return handoff(buf)
+    }
+
+    /**
+     * Full F06.2 / F06.5 Android MotionEvent adapter extracting historical + current real samples,
+     * tool type (`STYLUS`, `ERASER`, passive pen / `FINGER`, `MOUSE`), stylus primary & temporary eraser buttons,
+     * `ACTION_CANCEL` vs per-pointer `FLAG_CANCELED`, and honest pressure/tilt axis capabilities.
+     */
+    fun extractInkBatchFromMotionEvent(
+        session: SessionKey,
+        event: MotionEvent,
+        pointerIndex: Int = event.actionIndex,
+        axisCapabilities: DeviceAxisCapabilities? = null,
+        predictedSamples: List<PredictedSample> = emptyList()
+    ): Outcome<LeasedInkInputBatch, SubmitError> {
+        val masked = event.actionMasked
+        val flags = event.flags
+        val buttonState = event.buttonState
+        val rawToolType = event.getToolType(pointerIndex)
+        val toolType = mapAndroidToolType(rawToolType)
+        val caps = axisCapabilities ?: DeviceAxisCapabilities.fromInputDevice(event.device, toolType)
+        val isFlagCanceled = (flags and MotionEvent.FLAG_CANCELED) != 0
+        val actionKind = mapAndroidAction(masked, isFlagCanceled)
+        val primaryBtn = (buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
+        val secondaryEraserBtn = (buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY) != 0
+
+        val leasedOutcome = extractFromMotionEvent(session, event, pointerIndex)
+        val leased = when (leasedOutcome) {
+            is Outcome.Failure -> return leasedOutcome
+            is Outcome.Success -> leasedOutcome.value
+        }
+
+        val inkBatch = InputBatch.fromImmutableBatch(
+            batch = leased.batch,
+            toolType = toolType,
+            supportsPressure = caps.supportsPressure,
+            supportsTilt = caps.supportsTilt,
+            primaryButtonPressed = primaryBtn,
+            secondaryEraserButtonPressed = secondaryEraserBtn,
+            isFlagCanceled = isFlagCanceled,
+            predictedSamples = predictedSamples
+        )
+        return Outcome.Success(LeasedInkInputBatch(leasedBatch = leased, inkBatch = inkBatch))
+    }
+
+    /**
+     * Deterministic adapter entry point accepting raw Android MotionEvent constants (`actionMasked`, `flags`,
+     * `buttonState`, `androidToolType`, historical + current primitive arrays, and `DeviceAxisCapabilities`).
+     */
+    fun extractInkBatchFromAndroidEventData(
+        session: SessionKey,
+        pointerId: Int,
+        actionMasked: Int,
+        flags: Int = 0,
+        buttonState: Int = 0,
+        androidToolType: Int = MotionEvent.TOOL_TYPE_STYLUS,
+        axisCapabilities: DeviceAxisCapabilities? = null,
+         sampleCount: Int,
+        xs: FloatArray,
+        ys: FloatArray,
+        pressures: FloatArray,
+        tilts: FloatArray,
+        timestampsMs: LongArray,
+        predictedSamples: List<PredictedSample> = emptyList()
+    ): Outcome<LeasedInkInputBatch, SubmitError> {
+        val toolType = mapAndroidToolType(androidToolType)
+        val caps = axisCapabilities ?: DeviceAxisCapabilities.fromInputDevice(null, toolType)
+        val isFlagCanceled = (flags and MotionEvent.FLAG_CANCELED) != 0
+        val actionKind = mapAndroidAction(actionMasked, isFlagCanceled)
+        val primaryBtn = (buttonState and MotionEvent.BUTTON_STYLUS_PRIMARY) != 0
+        val secondaryEraserBtn = (buttonState and MotionEvent.BUTTON_STYLUS_SECONDARY) != 0
+
+        val seq = nextSequenceNumber()
+        val bufOutcome = acquireBuffer(session, pointerId, seq, actionKind)
+        val buf = when (bufOutcome) {
+            is Outcome.Failure -> return bufOutcome
+            is Outcome.Success -> bufOutcome.value
+        }
+
+        for (i in 0 until sampleCount) {
+            val effPressure = if (caps.supportsPressure) pressures[i] else 0.5f
+            val effTilt = if (caps.supportsTilt) tilts[i] else 0.0f
+            val appendRes = buf.appendSample(
+                x = xs[i],
+                y = ys[i],
+                pressure = effPressure,
+                tilt = effTilt,
+                timestampMs = timestampsMs[i]
+            )
+            if (appendRes is Outcome.Failure) {
+                cancelBuffer(buf)
+                return appendRes
+            }
+        }
+
+        val leasedOutcome = handoff(buf)
+        val leased = when (leasedOutcome) {
+            is Outcome.Failure -> return leasedOutcome
+            is Outcome.Success -> leasedOutcome.value
+        }
+
+        val inkBatch = InputBatch.fromImmutableBatch(
+            batch = leased.batch,
+            toolType = toolType,
+            supportsPressure = caps.supportsPressure,
+            supportsTilt = caps.supportsTilt,
+            primaryButtonPressed = primaryBtn,
+            secondaryEraserButtonPressed = secondaryEraserBtn,
+            isFlagCanceled = isFlagCanceled,
+            predictedSamples = predictedSamples
+        )
+        return Outcome.Success(LeasedInkInputBatch(leasedBatch = leased, inkBatch = inkBatch))
+    }
+
+    companion object {
+        fun mapAndroidToolType(androidToolType: Int): InputToolType {
+            return when (androidToolType) {
+                MotionEvent.TOOL_TYPE_STYLUS -> InputToolType.STYLUS
+                MotionEvent.TOOL_TYPE_ERASER -> InputToolType.ERASER
+                MotionEvent.TOOL_TYPE_FINGER -> InputToolType.FINGER
+                MotionEvent.TOOL_TYPE_MOUSE -> InputToolType.MOUSE
+                else -> InputToolType.UNKNOWN
+            }
+        }
+
+        fun mapAndroidAction(actionMasked: Int, isFlagCanceled: Boolean): InputActionKind {
+            return when {
+                actionMasked == MotionEvent.ACTION_CANCEL -> InputActionKind.CANCEL
+                isFlagCanceled && (actionMasked == MotionEvent.ACTION_UP || actionMasked == MotionEvent.ACTION_POINTER_UP) ->
+                    InputActionKind.UP
+                isFlagCanceled -> InputActionKind.CANCEL
+                actionMasked == MotionEvent.ACTION_DOWN || actionMasked == MotionEvent.ACTION_POINTER_DOWN ->
+                    InputActionKind.DOWN
+                actionMasked == MotionEvent.ACTION_MOVE -> InputActionKind.MOVE
+                actionMasked == MotionEvent.ACTION_UP || actionMasked == MotionEvent.ACTION_POINTER_UP ->
+                    InputActionKind.UP
+                actionMasked == MotionEvent.ACTION_HOVER_ENTER ||
+                    actionMasked == MotionEvent.ACTION_HOVER_MOVE ||
+                    actionMasked == MotionEvent.ACTION_HOVER_EXIT ||
+                    actionMasked == MotionEvent.ACTION_BUTTON_PRESS ||
+                    actionMasked == MotionEvent.ACTION_BUTTON_RELEASE -> InputActionKind.HOVER
+                else -> InputActionKind.MOVE
+            }
+        }
     }
 }

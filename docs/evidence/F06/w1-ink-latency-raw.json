@@ -1,0 +1,35 @@
+{
+  "phase_id": "F06",
+  "seed": 20261105,
+  "workload": "W1 (100 pages x 100 strokes x 64 real samples)",
+  "measured_strokes": 30,
+  "samples_per_batch": 64,
+  "metrics": {
+    "main_callback_dispatch_ms": {
+      "budget_p95_ms": 1.0,
+      "p50_ms": 0.0047,
+      "p95_ms": 0.0178
+    },
+    "engine_ingest_64_samples_ms": {
+      "budget_p95_ms": 2.0,
+      "p50_ms": 0.0439,
+      "p95_ms": 0.0879
+    },
+    "input_to_canvas_post_w1_ms": {
+      "budget_p95_ms": 8.0,
+      "p50_ms": 2.3331,
+      "p95_ms": 4.8395
+    },
+    "durable_commit_lag_w1_ms": {
+      "budget_p95_ms": 200.0,
+      "p50_ms": 0.7741,
+      "p95_ms": 1.0532
+    }
+  },
+  "invariants": {
+    "phantom_strokes_on_cancel": 0,
+    "predicted_samples_saved_in_db_or_undo": 0,
+    "draft_to_committed_pixel_mismatch_count": 0,
+    "reloaded_vector_editable_after_reopen": true
+  }
+}

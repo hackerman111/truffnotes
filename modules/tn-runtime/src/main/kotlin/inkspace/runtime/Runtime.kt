@@ -4,9 +4,17 @@ import inkspace.core.codec.WriteSet
 import inkspace.core.error.StartError
 import inkspace.core.error.SubmitError
 import inkspace.core.id.DocumentId
+import inkspace.core.id.LayerId
+import inkspace.core.id.PageId
 import inkspace.core.id.Revision
 import inkspace.core.id.SessionEpoch
+import inkspace.core.id.SpaceId
 import inkspace.core.id.TransactionId
+import inkspace.core.ink.BrushSpec
+import inkspace.core.ink.EffectiveInkToolMode
+import inkspace.core.ink.InputBatch
+import inkspace.core.ink.InputContext
+import inkspace.core.ink.StylusInputPolicy
 import inkspace.core.model.DocumentSnapshot
 import inkspace.core.model.DocumentState
 import inkspace.core.model.SessionKey
@@ -15,10 +23,13 @@ import inkspace.core.mutation.applyPlan
 import inkspace.core.mutation.validatePlan
 import inkspace.core.outcome.Outcome
 import inkspace.core.ports.DurableAck
+import inkspace.core.ports.GeometryPort
 import inkspace.core.ports.RequestId
 import inkspace.core.ports.StagedAssetRef
 import inkspace.core.ports.StorageReply
 import inkspace.core.ports.StorageRequest
+import inkspace.core.render.DraftStrokeSceneItem
+import inkspace.core.render.EphemeralOverlayItem
 import inkspace.core.runtime.AppCommand
 import inkspace.core.runtime.AppEvent
 import inkspace.core.runtime.AppGateway
@@ -29,6 +40,8 @@ import inkspace.core.runtime.RuntimeConfig
 import inkspace.core.runtime.SaveStatus
 import inkspace.core.runtime.SaveStatusKind
 import inkspace.core.runtime.ViewportState
+import inkspace.ink.InkEngine
+import inkspace.ink.InkGeometryPort
 import inkspace.store.DocumentStore
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -64,6 +77,12 @@ class Runtime private constructor(
         var isOverflowed: Boolean = false
     ) {
         val pendingCommandQueue = ArrayDeque<AppCommand>()
+        val pendingInkBatchQueue = ArrayDeque<InputBatch>()
+        val inkEngine = InkEngine()
+        var activeBrush: BrushSpec = BrushSpec()
+        var inputPolicy: StylusInputPolicy = StylusInputPolicy()
+        val activeDraftStrokes = ConcurrentHashMap<Int, DraftStrokeSceneItem>()
+        val activeEphemeralOverlays = ConcurrentHashMap<Int, EphemeralOverlayItem>()
         val inFlightReservations = LinkedHashMap<Long, PersistReservation>()
         val outOfOrderAckedRevisions = HashSet<Long>()
         var closed: Boolean = false
@@ -97,6 +116,8 @@ class Runtime private constructor(
             inkspace.core.runtime.MemoryCategory.INPUT_IPC_PERSISTENCE_QUEUES to config.totalQueueByteCap
         )
     )
+
+    val defaultGeometryPort: GeometryPort = ports.geometryPort ?: InkGeometryPort()
 
     internal val queues = RuntimeQueues(config, governor)
 
@@ -232,6 +253,55 @@ class Runtime private constructor(
 
     override fun latestViewport(session: SessionKey): ViewportState? = publishedViewports[session]
 
+    fun activeDraftStrokes(session: SessionKey): List<DraftStrokeSceneItem> {
+        val ctx = activeSessions[session] ?: return emptyList()
+        return java.util.List.copyOf(ctx.activeDraftStrokes.values)
+    }
+
+    fun activeEphemeralOverlays(session: SessionKey): List<EphemeralOverlayItem> {
+        val ctx = activeSessions[session] ?: return emptyList()
+        return java.util.List.copyOf(ctx.activeEphemeralOverlays.values)
+    }
+
+    fun configureInkSession(
+        session: SessionKey,
+        brush: BrushSpec,
+        policy: StylusInputPolicy = StylusInputPolicy()
+    ) {
+        engineExecutor.submit {
+            val ctx = activeSessions[session] ?: return@submit
+            ctx.activeBrush = brush
+            ctx.inputPolicy = policy
+        }.get(5, TimeUnit.SECONDS)
+    }
+
+    /**
+     * Submits a handwriting [InputBatch] (`RealSample` + optional `PredictedSample`) to the Engine actor,
+     * updating live draft strokes, ephemeral prediction/hover overlays, or committing the finished stroke
+     * through `validatePlan` -> `applyPlan` -> `History` -> `DocumentStore` on `UP`.
+     */
+    fun submitInkBatch(batch: InputBatch): Outcome<RequestId, SubmitError> {
+        if (shuttingDown.get()) {
+            return Outcome.Failure(SubmitError.ShutdownInProgress("Runtime is shutting down"))
+        }
+        val latestEpoch = latestEpochByDocument[batch.session.document]
+        val ctx = activeSessions[batch.session]
+        if (latestEpoch == null || latestEpoch != batch.session.epoch.value || ctx == null || ctx.closed) {
+            return Outcome.Failure(
+                SubmitError.StaleSession(
+                    session = "${batch.session.document.value}@${batch.session.epoch.value}",
+                    reason = "Session is closed or superseded by epoch ${latestEpoch ?: -1L}"
+                )
+            )
+        }
+        synchronized(this) {
+            ctx.pendingInkBatchQueue.addLast(batch)
+        }
+        val reqId = RequestId(requestIdGen.getAndIncrement())
+        scheduleEngineStepIfNotPaused()
+        return Outcome.Success(reqId)
+    }
+
     override fun closeAsync(): Outcome<RequestId, SubmitError> {
         if (!shuttingDown.compareAndSet(false, true)) {
             return Outcome.Failure(SubmitError.ShutdownInProgress("closeAsync already in progress"))
@@ -336,6 +406,7 @@ class Runtime private constructor(
             if (queues.hasPendingDurableAcks()) return true
             if (globalControlQueue.isNotEmpty()) return true
             for (ctx in activeSessions.values) {
+                if (ctx.pendingInkBatchQueue.isNotEmpty()) return true
                 if (ctx.pendingCommandQueue.isNotEmpty()) return true
             }
             return false
@@ -409,15 +480,144 @@ class Runtime private constructor(
             processCommandInternal(globalCmd, traceLog)
         }
 
-        // 4. Round-robin up to 2 commands per session so heavy operations on one document never starve another
+        // 4. Round-robin up to 4 ink batches and up to 2 commands per session
         val sessionsSnapshot = synchronized(this) { roundRobinOrder.toList() }
         for (sessionKey in sessionsSnapshot) {
+            for (inkStep in 0 until 4) {
+                val inkBatch = synchronized(this) {
+                    val ctx = activeSessions[sessionKey]
+                    if (ctx == null || ctx.pendingInkBatchQueue.isEmpty()) null else ctx.pendingInkBatchQueue.removeFirst()
+                } ?: break
+                processInkBatchInternal(inkBatch)
+            }
             for (step in 0 until 2) {
                 val cmd = synchronized(this) {
                     val ctx = activeSessions[sessionKey]
                     if (ctx == null || ctx.pendingCommandQueue.isEmpty()) null else ctx.pendingCommandQueue.removeFirst()
                 } ?: break
                 processCommandInternal(cmd, traceLog)
+            }
+        }
+    }
+
+    private fun processInkBatchInternal(batch: InputBatch) {
+        val ctx = activeSessions[batch.session] ?: return
+        val activePage = ctx.viewport.activePageId ?: ctx.state.pages.firstOrNull()?.id ?: PageId("page-1")
+        val activeLayer = ctx.state.layers.firstOrNull { it.pageId == activePage }?.id
+            ?: ctx.state.layers.firstOrNull()?.id
+            ?: LayerId("layer-1")
+        val activeSpace = ctx.state.pages.firstOrNull { it.id == activePage }?.spaceId ?: SpaceId("space-1")
+        val isLayerLocked = ctx.state.isLayerLocked(activeLayer) || ctx.viewport.isReadOnly
+
+        val inputCtx = InputContext(
+            docVersion = ctx.state.version,
+            activeSpaceId = activeSpace,
+            activePageId = activePage,
+            activeLayerId = activeLayer,
+            isLayerLocked = isLayerLocked,
+            camera = ctx.viewport.camera,
+            brush = ctx.activeBrush,
+            policy = ctx.inputPolicy
+        )
+
+        val ingestRes = ctx.inkEngine.ingest(batch, inputCtx)
+        val out = when (ingestRes) {
+            is Outcome.Failure -> {
+                ctx.activeDraftStrokes.remove(batch.pointerId)
+                ctx.activeEphemeralOverlays.remove(batch.pointerId)
+                queues.emitMainEvent(
+                    AppEvent.ErrorEvent(
+                        session = batch.session,
+                        code = "INK_INGEST_ERROR",
+                        message = ingestRes.error.toString()
+                    )
+                )
+                return
+            }
+            is Outcome.Success -> ingestRes.value
+        }
+
+        if (out.effectiveToolMode == EffectiveInkToolMode.CANCELED ||
+            out.effectiveToolMode == EffectiveInkToolMode.PALM_REJECTED
+        ) {
+            if (out.effectiveToolMode == EffectiveInkToolMode.CANCELED &&
+                batch.action == InputActionKind.CANCEL &&
+                !batch.isFlagCanceled
+            ) {
+                ctx.activeDraftStrokes.clear()
+                ctx.activeEphemeralOverlays.clear()
+            } else {
+                ctx.activeDraftStrokes.remove(batch.pointerId)
+                ctx.activeEphemeralOverlays.remove(batch.pointerId)
+            }
+            queues.emitMainEvent(
+                AppEvent.InputDraftCanceled(
+                    session = batch.session,
+                    pointerId = batch.pointerId,
+                    sequenceNumber = batch.sequenceNumber,
+                    reason = out.effectiveToolMode.name
+                )
+            )
+            return
+        }
+
+        val draftStroke = out.draftStroke
+        if (draftStroke != null) {
+            ctx.activeDraftStrokes[batch.pointerId] = draftStroke
+        } else {
+            ctx.activeDraftStrokes.remove(batch.pointerId)
+        }
+
+        val overlay = out.predictedOverlay ?: out.hoverOverlay
+        if (overlay != null) {
+            ctx.activeEphemeralOverlays[batch.pointerId] = overlay
+        } else {
+            ctx.activeEphemeralOverlays.remove(batch.pointerId)
+        }
+
+        val navDelta = out.navigationDeltaDoc
+        if (navDelta != null) {
+            val oldCam = ctx.viewport.camera
+            val nextCam = oldCam.copy(
+                translateX = oldCam.translateX + navDelta.x * oldCam.scale,
+                translateY = oldCam.translateY + navDelta.y * oldCam.scale
+            )
+            updateViewportInternal(ctx.viewport.copy(camera = nextCam))
+        }
+
+        queues.emitMainEvent(
+            AppEvent.InputAccepted(
+                session = batch.session,
+                pointerId = batch.pointerId,
+                sequenceNumber = batch.sequenceNumber,
+                sampleCount = batch.realSampleCount,
+                action = batch.action
+            )
+        )
+
+        val commitPlan = out.commitPlan
+        if (commitPlan != null) {
+            val estBytes = batch.byteSize.toLong().coerceAtLeast(256L)
+            val reserveRes = queues.tryReservePersistAndAck(batch.session, estBytes)
+            when (reserveRes) {
+                is Outcome.Failure -> {
+                    ctx.isOverflowed = true
+                    val status = ctx.computeSaveStatus()
+                    publishedSaveStatuses[ctx.session] = status
+                    queues.emitMainEvent(AppEvent.SaveStatusChanged(status))
+                }
+                is Outcome.Success -> {
+                    ctx.isOverflowed = false
+                    ctx.inFlightReservations[ctx.appliedRevision + 1L] = reserveRes.value
+                    executeEditInternal(
+                        AppCommand.SubmitEdit(
+                            session = batch.session,
+                            plan = commitPlan,
+                            estimatedBytes = estBytes
+                        ),
+                        null
+                    )
+                }
             }
         }
     }
