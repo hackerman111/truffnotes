@@ -1,0 +1,14 @@
+{
+  "phase": "F03",
+  "task": "faultStore",
+  "seed": 20261105,
+  "runs": 1000,
+  "totalCommittedTransactions": 2675,
+  "totalInjectedFaults": 1000,
+  "durablePrefixLossCount": 0,
+  "sqliteIntegrityFailures": 0,
+  "usedHeapBytesAfterRuns": 107127648,
+  "elapsedMs": 2077,
+  "faultScenarioCounts": { "CRASH_DURING_DB_TRANSACTION": 163, "CRASH_AFTER_ASSET_FSYNC_BEFORE_DB_COMMIT": 150, "DISK_FULL_ON_DB_COMMIT": 176, "TRUNCATED_WAL_TAIL": 166, "DISK_FULL_ON_ASSET_WRITE": 170, "CRASH_AFTER_DB_COMMIT_BEFORE_ACK": 175 },
+  "status": "PASS"
+}

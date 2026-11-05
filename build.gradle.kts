@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.jvm) apply false
+    alias(libs.plugins.android.library) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.detekt) apply false
     alias(libs.plugins.ktlint) apply false
@@ -220,3 +221,10 @@ tasks.register("lint") {
         }
     }
 }
+
+tasks.register("faultStore") {
+    group = "verification"
+    description = "Runs seeded crash/fault schedules against :tn-store"
+    dependsOn(":tn-store:faultStore")
+}
+

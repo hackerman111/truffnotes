@@ -27,3 +27,7 @@ project(":tn-core").projectDir = file("modules/tn-core")
 
 include(":tn-test-support")
 project(":tn-test-support").projectDir = file("modules/tn-test-support")
+
+include(":tn-store")
+project(":tn-store").projectDir = file("modules/tn-store")
+

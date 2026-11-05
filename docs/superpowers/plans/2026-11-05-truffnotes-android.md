@@ -186,11 +186,11 @@ W4 — stress, не обещание 60 FPS при 10000 одновременн�
 
 **API:** core sealed StorageRequest: Open/Read/StageDraftChunk/Commit/Flush/Close/Backup/Version/Collect; StorageReply/DurableAck. Commit содержит write-set/expected durable base/TransactionId/staged assets. Store implements StoragePort/ResourcePort; provisional chunks не создают revision.
 
-- [ ] F03.1 Создать storage contract tests `commit_ack`, `reopen`, `retry_idempotence`, `stale_base`, `disk_full`, `asset_before_ref`, `truncated_wal`, `backup_consistent`; fake FS/SQLite faults покрывают точки до/после fsync и DB commit.
-- [ ] F03.2 Реализовать document DB migrations, один writer через BundledSQLiteDriver, bounded read jobs, WAL/FULL/foreign keys и atomic model+revision+transaction record. Commit retry не дублирует штрих.
-- [ ] F03.3 Добавить immutable assets staging/fsync/checksum, reachability и lease-aware orphan GC. Отсутствующий/повреждённый asset не маскировать пустой картинкой.
-- [ ] F03.4 Реализовать lazy page/space chunk loads, read lease и history spill; WriteSet replay проходит core validation, не создаёт второй reducer.
-- [ ] F03.5 Выполнить 1000 seeded crash schedules в отдельном child process и reopen; проверить hashes/counts durable prefix, versions и SQLite integrity. Составить перечень платформенных fsync assumptions для Android проверки.
+- [x] F03.1 Создать storage contract tests `commit_ack`, `reopen`, `retry_idempotence`, `stale_base`, `disk_full`, `asset_before_ref`, `truncated_wal`, `backup_consistent`; fake FS/SQLite faults покрывают точки до/после fsync и DB commit.
+- [x] F03.2 Реализовать document DB migrations, один writer через BundledSQLiteDriver, bounded read jobs, WAL/FULL/foreign keys и atomic model+revision+transaction record. Commit retry не дублирует штрих.
+- [x] F03.3 Добавить immutable assets staging/fsync/checksum, reachability и lease-aware orphan GC. Отсутствующий/повреждённый asset не маскировать пустой картинкой.
+- [x] F03.4 Реализовать lazy page/space chunk loads, read lease и history spill; WriteSet replay проходит core validation, не создаёт второй reducer.
+- [x] F03.5 Выполнить 1000 seeded crash schedules в отдельном child process и reopen; проверить hashes/counts durable prefix, versions и SQLite integrity. Составить перечень платформенных fsync assumptions для Android проверки.
 
 **Gate:** `rtk proxy ./gradlew :tn-store:testDebugUnitTest :tn-store:connectedDebugAndroidTest` → PASS; `rtk proxy ./gradlew faultStore -Pseed=20261105 -Pruns=1000` → 0 durable loss/corruption, bounded memory. JVM fault harness проверяет протокол; фактический driver на Android проверен instrumentation, real kill/disk tests продолжаются F04/F23. Saved status не выдаётся до durable ack.
 

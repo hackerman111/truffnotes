@@ -28,11 +28,17 @@ sealed interface TextError : CoreError {
 sealed interface ResourceError : CoreError {
     data class ResourceNotFound(val key: String) : ResourceError
     data class ResourceExhausted(val reason: String) : ResourceError
+    data class CorruptedResource(val key: String, val reason: String) : ResourceError
 }
 
 sealed interface StorageError : CoreError {
     data class IoFailure(val message: String) : StorageError
     data class TransactionAborted(val reason: String) : StorageError
+    data class StaleDurableBase(val expected: Long, val actual: Long) : StorageError
+    data class DiskFull(val message: String) : StorageError
+    data class MissingAssetReference(val assetId: String) : StorageError
+    data class CorruptedDatabase(val reason: String) : StorageError
+    data class InvalidWriteSet(val reason: String) : StorageError
 }
 
 sealed interface SubmitError : CoreError {

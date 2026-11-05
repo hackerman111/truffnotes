@@ -43,9 +43,15 @@ data class ShapingFailed(val reason: String) : TextError
 sealed interface ResourceError : CoreError {
 data class ResourceNotFound(val key: String) : ResourceError
 data class ResourceExhausted(val reason: String) : ResourceError
+data class CorruptedResource(val key: String, val reason: String) : ResourceError
 sealed interface StorageError : CoreError {
 data class IoFailure(val message: String) : StorageError
 data class TransactionAborted(val reason: String) : StorageError
+data class StaleDurableBase(val expected: Long, val actual: Long) : StorageError
+data class DiskFull(val message: String) : StorageError
+data class MissingAssetReference(val assetId: String) : StorageError
+data class CorruptedDatabase(val reason: String) : StorageError
+data class InvalidWriteSet(val reason: String) : StorageError
 sealed interface SubmitError : CoreError {
 data class QueueOverflow(val currentDepth: Int, val maxDepth: Int) : SubmitError
 data class ShutdownInProgress(val message: String) : SubmitError
@@ -574,10 +580,91 @@ data class ResourceLease(
 val asset: AssetId,
 val sizeBytes: Long,
 val isAvailable: Boolean
+fun isClosed(): Boolean = closed
+data class StagedAssetRef(
+val assetId: AssetId,
+val stagingId: String,
+val sizeBytes: Long,
+val sha256Hex: String
+data class DurableAck(
+val document: DocumentId,
+val revision: Revision,
+val transactionId: TransactionId,
+val wasDeduplicated: Boolean = false
 sealed interface StorageRequest {
+data class Open(
+val documentId: DocumentId,
+val createIfMissing: Boolean = true
+data class Read(
+val documentId: DocumentId,
+val spaceId: SpaceId? = null,
+val pageId: PageId? = null,
+val objectIds: List<ObjectId> = emptyList(),
+val byteBudget: Long = 8_388_608L
+data class StageDraftChunk(
+val documentId: DocumentId,
+val gestureId: GestureId,
+val chunkIndex: Int,
+val encodedBytes: ByteArray
 data class Commit(
 val revision: Revision,
-val payloadBytes: Long
+val payloadBytes: Long = 0L,
+val transactionId: TransactionId = TransactionId("tx-${revision.value}"),
+val expectedDurableBase: Revision = Revision((revision.value - 1L).coerceAtLeast(0L)),
+val writeSet: WriteSet? = null,
+val stagedAssets: List<StagedAssetRef> = emptyList()
+data class Flush(
+val documentId: DocumentId
+data class Close(
+val documentId: DocumentId
+data class Backup(
+val documentId: DocumentId,
+val targetPath: String
+data class Version(
+val documentId: DocumentId,
+val versionId: VersionId,
+val label: String,
+val isPinned: Boolean = false
+data class Collect(
+val documentId: DocumentId,
+val pinnedAssets: Set<AssetId> = emptySet(),
+val cancelGestureIds: Set<GestureId> = emptySet()
+sealed interface StorageReply {
+data class Opened(
+val documentId: DocumentId,
+val durableRevision: Revision,
+val totalObjects: Int
+data class ReadResult(
+val documentId: DocumentId,
+val revision: Revision,
+val objects: List<SceneObject>,
+val lease: ResourceLease
+data class DraftChunkStaged(
+val documentId: DocumentId,
+val gestureId: GestureId,
+val chunkIndex: Int,
+val stagedBytes: Long
+data class Committed(
+val ack: DurableAck
+data class Flushed(
+val documentId: DocumentId,
+val durableRevision: Revision
+data class Closed(
+val documentId: DocumentId
+data class BackedUp(
+val documentId: DocumentId,
+val durableRevision: Revision,
+val targetPath: String,
+val sizeBytes: Long
+data class VersionCreated(
+val documentId: DocumentId,
+val versionId: VersionId,
+val revision: Revision
+data class Collected(
+val documentId: DocumentId,
+val deletedOrphanAssets: Int,
+val deletedDraftChunks: Int,
+val reclaimedBytes: Long
 value class RequestId(val value: Long)
 sealed interface PdfRequest {
 data class RenderPage(val pageIndex: Int, val width: Int, val height: Int) : PdfRequest

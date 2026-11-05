@@ -1,0 +1,42 @@
+{
+  "phase": "F03",
+  "title": "Надёжное локальное хранение и восстановление (:tn-store)",
+  "seed": 20261105,
+  "requirements_verified": ["R28", "R29", "R31", "R32"],
+  "test_suites": [
+    {
+      "suite": "inkspace.store.F03StorageContractTest",
+      "cases": [
+        "commit_ack",
+        "reopen",
+        "retry_idempotence",
+        "stale_base",
+        "disk_full",
+        "asset_before_ref",
+        "truncated_wal",
+        "backup_consistent"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.store.F03FaultStoreChildProcessTest",
+      "cases": [
+        "fault_store_1000_seeded_crash_schedules"
+      ],
+      "seed": 20261105,
+      "runs": 1000,
+      "total_committed_transactions": 2675,
+      "durable_prefix_loss_count": 0,
+      "sqlite_integrity_failures": 0,
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.store.StoreAndroidInstrumentedTest",
+      "cases": [
+        "android_bundled_sqlite_wal_commit_and_reopen"
+      ],
+      "compile_status": "PASS (:tn-store:assembleDebugAndroidTest)",
+      "device_execution_status": "PENDING_PHYSICAL_OR_AVD_DEVICE"
+    }
+  ]
+}

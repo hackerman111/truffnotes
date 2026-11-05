@@ -435,8 +435,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f03",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-store/src/test/kotlin/inkspace/store/F03StorageContractTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F03/report.md"
     },
     {
@@ -451,8 +451,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f03",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-store/src/test/kotlin/inkspace/store/F03StorageContractTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F03/report.md"
     },
     {
