@@ -1,0 +1,135 @@
+{
+  "schema_version": 1,
+  "generator_version": "1.0.0",
+  "seed": 20261105,
+  "frozen_at": "2026-11-05",
+  "owner_phase": "F00",
+  "notes": "Synthetic benchmark workloads W0-W6. Do NOT use user/proprietary documents for automated gates.",
+  "workloads": [
+    {
+      "id": "W0",
+      "name": "Empty Library / Single Empty A4",
+      "purpose": "Cold launch, baseline empty PSS, first stroke latency",
+      "parameters": {
+        "library_documents": 0,
+        "notebook_pages": 1,
+        "page_format": "A4_PORTRAIT",
+        "strokes_count": 0,
+        "objects_count": 0
+      },
+      "expected_metrics": {
+        "cold_start_interactive_ms_p95_max": 2000.0,
+        "baseline_pss_mib_max": 96.0,
+        "first_stroke_dispatch_ms_p95_max": 2.0
+      }
+    },
+    {
+      "id": "W1",
+      "name": "Standard Notebook 100 Pages",
+      "purpose": "Normal writing, autosave, pan/zoom, eraser, durable lag",
+      "parameters": {
+        "pages_count": 100,
+        "strokes_per_page": 100,
+        "samples_per_stroke": 64,
+        "total_strokes": 10000,
+        "brush_types": ["BALL", "FOUNTAIN", "PENCIL", "BRUSH", "HIGHLIGHTER"]
+      },
+      "expected_metrics": {
+        "frame_time_60hz_ms_p95_max": 16.67,
+        "durable_lag_ms_p95_max": 200.0,
+        "input_to_canvas_post_ms_p95_max": 8.0,
+        "process_pss_mib_max": 384.0
+      }
+    },
+    {
+      "id": "W2",
+      "name": "Dense Notebook 500 Pages",
+      "purpose": "Lazy chunk residency, page jump, undo, spatial queries, 100k strokes total",
+      "parameters": {
+        "pages_count": 500,
+        "strokes_per_page": 200,
+        "samples_per_stroke": 64,
+        "total_strokes": 100000,
+        "visible_objects_max": 1000
+      },
+      "expected_metrics": {
+        "page_jump_ms_p95_max": 300.0,
+        "spatial_query_1000_candidates_ms_p95_max": 8.0,
+        "frame_time_60hz_ms_p95_max": 16.67,
+        "process_pss_mib_max": 384.0
+      }
+    },
+    {
+      "id": "W3",
+      "name": "Large PDF 1000 Pages",
+      "purpose": "PDF streaming, raster tiles, text search, links, outline, export <= 500 MiB",
+      "parameters": {
+        "pdf_pages_count": 1000,
+        "pdf_size_mib_max": 500,
+        "mix": "vector_text_scanned_and_diagram_pages",
+        "outline_depth": 4,
+        "links_count": 250
+      },
+      "expected_metrics": {
+        "first_editable_viewport_ms_p95_max": 3000.0,
+        "page_jump_cold_ms_p95_max": 300.0,
+        "peak_pss_mib_max": 512.0
+      }
+    },
+    {
+      "id": "W4",
+      "name": "Single Space Stress 10000 Objects",
+      "purpose": "Dense lasso selection, nested groups depth 32, group transform, image memory admission",
+      "parameters": {
+        "space_type": "INFINITE_SPACE",
+        "objects_count": 10000,
+        "nested_groups_depth_max": 32,
+        "images_count": 50,
+        "image_resolution": "12MP (4000x3000)",
+        "simultaneous_visible_max": 10000
+      },
+      "expected_metrics": {
+        "no_data_loss_or_oom": true,
+        "peak_pss_mib_max": 512.0
+      }
+    },
+    {
+      "id": "W5",
+      "name": "Library Stress 10000 Items",
+      "purpose": "Nested folders, tags, smart collections, FTS 100 MiB known text, catalog paging",
+      "parameters": {
+        "library_items_count": 10000,
+        "folders_depth_max": 8,
+        "tags_count": 50,
+        "fts_text_corpus_mib": 100,
+        "search_results_page_size": 100
+      },
+      "expected_metrics": {
+        "metadata_query_ms_p95_max": 50.0,
+        "fts_query_ms_p95_max": 150.0,
+        "fts_indexing_query_ms_p95_max": 250.0
+      }
+    },
+    {
+      "id": "W6",
+      "name": "Sustained Input & Soak 30 Minutes",
+      "purpose": "Continuous stylus 240 samples/sec, autosave cycles, 2 active viewports, PDF prefetch, memory leak check",
+      "parameters": {
+        "duration_minutes": 30,
+        "input_sample_rate_hz": 240,
+        "viewports_count": 2,
+        "autosave_frequency_per_stroke": true,
+        "concurrent_pdf_prefetch": true
+      },
+      "expected_metrics": {
+        "no_anr_or_crash": true,
+        "no_unbounded_backlog": true,
+        "dropped_real_samples_count": 0,
+        "late_5min_frame_time_60hz_ms_p95_max": 16.67,
+        "late_5min_durable_lag_ms_p95_max": 200.0,
+        "retained_allocations_delta_mib_max": 8.0,
+        "pss_stabilized_delta_mib_max": 16.0
+      }
+    }
+  ]
+}

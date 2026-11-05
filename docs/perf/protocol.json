@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "frozen_at": "2026-11-05",
+  "owner_phase": "F00",
+  "seed": 20261105,
+  "quantile_definition": {
+    "method": "nearest_rank_inclusive_sorted_1_indexed",
+    "formula": "Given N sorted ascending samples x[0..N-1], rank_index(p) = ceil(p * N) - 1 clamped to [0, N-1]. Reported metrics: p50 (p=0.50), p95 (p=0.95), p99 (p=0.99), max, min, count.",
+    "aggregation_rule": "Never average across different device profiles (D1, D2, D3) or refresh rate modes (60Hz, 90Hz, 120Hz). Each device profile and refresh mode must pass independently."
+  },
+  "run_preconditions": {
+    "build_variant": "release or profileable debug-stripped",
+    "power_state": "charger disconnected or battery >= 50% without charging thermal throttle; fixed screen brightness 200 nits",
+    "thermal_state": "PowerManager.THERMAL_STATUS_NONE or THERMAL_STATUS_LIGHT before starting run",
+    "concurrent_runs_on_same_device": false,
+    "interaction_latency_runs": {
+      "warmup_iterations": 5,
+      "measured_repetitions": 10
+    },
+    "cold_start_runs": {
+      "independent_launches_min": 10
+    },
+    "search_runs": {
+      "distinct_queries_min": 100,
+      "query_classes": ["exact_title", "prefix_token", "multi_word_fts", "tag_and_folder_filter", "pdf_page_text", "dirty_overlay_match", "dirty_overlay_deleted_exclusion"]
+    },
+    "frame_trace_runs": {
+      "duration_seconds": 60,
+      "repetitions": 3
+    },
+    "soak_w6_runs": {
+      "duration_minutes": 30,
+      "repetitions": 3,
+      "late_window_minutes": 5
+    }
+  },
+  "gates": {
+    "frame_time_60hz": {
+      "workloads": ["W1", "W2"],
+      "condition": "visible_objects <= 1000",
+      "p95_ms_max": 16.67,
+      "p99_ms_max": 33.3,
+      "missed_frames_pct_max": 1.0
+    },
+    "frame_time_90hz": {
+      "workloads": ["W1", "W2"],
+      "condition": "visible_objects <= 1000 on 90Hz display mode",
+      "p95_ms_max": 11.11,
+      "fallback_policy": "Explicit 60Hz fallback if profile does not claim 90Hz"
+    },
+    "frame_time_120hz": {
+      "workloads": ["W1", "W2"],
+      "condition": "visible_objects <= 1000 on 120Hz display mode",
+      "p95_ms_max": 8.33,
+      "fallback_policy": "Explicit 60Hz fallback if profile does not claim 120Hz"
+    },
+    "dispatch_input_batch": {
+      "main_callback_p95_ms_max": 1.0,
+      "engine_ingest_64_samples_p95_ms_max": 2.0,
+      "disk_waits_allowed": 0
+    },
+    "input_to_canvas_post": {
+      "workload": "W1",
+      "p95_ms_max": 8.0,
+      "note": "Measured to completion of Canvas draw/unlockAndPost; not claimed as physical display photon emission"
+    },
+    "pen_to_photon": {
+      "p95_60hz_ms_max": 50.0,
+      "p95_120hz_ms_max": 35.0,
+      "camera_fps_min": 240,
+      "strokes_min": 100
+    },
+    "durable_lag": {
+      "workload": "W1",
+      "p95_ms_max": 200.0,
+      "requires_fsync_commit": true
+    },
+    "open_latency": {
+      "cold_app_to_interactive_library_p95_ms_max": 2000.0,
+      "first_editable_viewport_w2_w3_p95_ms_max": 3000.0
+    },
+    "page_jump": {
+      "workloads": ["W2", "W3"],
+      "cold_page_usable_viewport_p95_ms_max": 300.0
+    },
+    "spatial_query": {
+      "workload": "W2",
+      "candidates_max": 1000,
+      "p95_ms_max": 8.0
+    },
+    "search_latency": {
+      "workload": "W5",
+      "metadata_p95_ms_max": 50.0,
+      "fts_p95_ms_max": 150.0,
+      "fts_during_indexing_p95_ms_max": 250.0,
+      "max_rows_per_page": 100
+    },
+    "memory_caps_mib": {
+      "resident_model_payload_and_directory": 64,
+      "undo_redo_resident": 32,
+      "cpu_raster_image_pdf_tiles": 32,
+      "derived_paths_layout_spatial_caches": 32,
+      "pdf_service_working_set_target": 64,
+      "input_ipc_persistence_queues_total": 16,
+      "controlled_graphics_targets": 96,
+      "draft_stroke_resident_window": 8,
+      "process_pss_sum_w1_w2_max": 384,
+      "process_pss_peak_w3_w4_max": 512,
+      "open_close_rotate_100_cycles_controlled_delta_max": 8,
+      "open_close_rotate_100_cycles_pss_delta_max": 16
+    },
+    "crash_safety": {
+      "lost_or_corrupted_durable_transactions_max": 0,
+      "seeded_fault_schedules_min": 1000
+    }
+  }
+}

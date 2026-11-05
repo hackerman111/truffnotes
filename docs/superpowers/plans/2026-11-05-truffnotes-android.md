@@ -145,11 +145,11 @@ W4 — stress, не обещание 60 FPS при 10000 одновременн�
 
 **Consumes → produces:** исходное ТЗ → ADR с точными versions/ABIs/GPU capabilities, device matrix, fixture manifest, работающий минимальный spike. Spike не считается production редактором.
 
-- [ ] F00.1 Инвентаризировать каталог/архив, при возможности создать обычный Git repo без изменения read-only служебных файлов; зафиксировать fingerprints исходных спецификаций. Создать requirement/acceptance IDs по матрице.
-- [ ] F00.2 На минимальном Surface показать hardware Canvas path, pressure-driven draft и PDF tile через Kotlin ports; воспроизвести historical batch, CANCEL, surface destroy/recreate. Измерить dispatch/Canvas post/frame/PSS; хранить минимальные raw traces.
-- [ ] F00.3 Проверить PDFium на API29 arm64: render, text/search/link/outline, page import/delete/reorder и запись PDF с path/annotation. Проверить StaticLayout/TextPaintPlan→Canvas/PdfDocument для кириллицы/RTL/CJK/emoji, шрифты/IME, 16KiB alignment bundled libraries и APK load. Не оставлять неработающий PDF export на позднюю фазу.
-- [ ] F00.4 Зафиксировать toolchain/dependencies и исходники PDFium, checksums, лицензии/размер APK, список поддержанных GPU/axes. Выбрать один production pipeline; spike изолировать от Gradle production dependency graph.
-- [ ] F00.5 Заморозить корпуса и devices/protocol; проверить calibration timings и формулу quantiles на искусственных данных. Составить отчёт о выполнимости caps/latency, перечислить gaps.
+- [x] F00.1 Инвентаризировать каталог/архив, при возможности создать обычный Git repo без изменения read-only служебных файлов; зафиксировать fingerprints исходных спецификаций. Создать requirement/acceptance IDs по матрице.
+- [x] F00.2 На минимальном Surface показать hardware Canvas path, pressure-driven draft и PDF tile через Kotlin ports; воспроизвести historical batch, CANCEL, surface destroy/recreate. Измерить dispatch/Canvas post/frame/PSS; хранить минимальные raw traces.
+- [x] F00.3 Проверить PDFium на API29 arm64: render, text/search/link/outline, page import/delete/reorder и запись PDF с path/annotation. Проверить StaticLayout/TextPaintPlan→Canvas/PdfDocument для кириллицы/RTL/CJK/emoji, шрифты/IME, 16KiB alignment bundled libraries и APK load. Не оставлять неработающий PDF export на позднюю фазу.
+- [x] F00.4 Зафиксировать toolchain/dependencies и исходники PDFium, checksums, лицензии/размер APK, список поддержанных GPU/axes. Выбрать один production pipeline; spike изолировать от Gradle production dependency graph.
+- [x] F00.5 Заморозить корпуса и devices/protocol; проверить calibration timings и формулу quantiles на искусственных данных. Составить отчёт о выполнимости caps/latency, перечислить gaps.
 
 **Gate:** spike запускается на реальном Android arm64 и 16KiB test image; перечисленные backend capabilities проверены, все версии/fixtures конкретны. `rtk proxy python3 tools/spikes/check_manifest.py` → exit 0 и все required entries; Android spike instrumentation → PASS. Если физического устройства нет — подготовка возможна, F00 hardware gate остаётся открытым.
 

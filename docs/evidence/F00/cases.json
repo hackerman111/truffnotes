@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "phase": "F00",
+  "frozen_at": "2026-11-05",
+  "seed": 20261105,
+  "cases": [
+    {
+      "id": "R01.platform-envelope",
+      "parent_requirement": "R01",
+      "source_section": "truffnotes.md 1, 4.1-4.2",
+      "title": "Android API 29+ baseline, arm64-v8a production + x86_64 test ABIs, 4KiB and 16KiB ELF LOAD alignment verified",
+      "owner_phase": "F00",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_elf_and_android_device_matrix",
+      "scenario_or_test_path": "tools/spikes/android/app/src/test/kotlin/inkspace/spike/StackVerificationTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F00/report.md"
+    },
+    {
+      "id": "R01.surface-stylus-pipeline",
+      "parent_requirement": "R01",
+      "source_section": "truffnotes.md 4.2-4.4",
+      "title": "Surface hardware Canvas path, pressure-driven draft, historical MotionEvent batch, ACTION_CANCEL/FLAG_CANCELED, surface destroy/recreate",
+      "owner_phase": "F00",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "D1_D2_D3_and_emulator",
+      "scenario_or_test_path": "tools/spikes/android/app/src/androidTest/kotlin/inkspace/spike/SpikeSurfacePdfInstrumentedTest.kt",
+      "status": "implemented_unverified",
+      "evidence_path": "docs/evidence/F00/report.md"
+    },
+    {
+      "id": "R01.pdfium-and-text-pipeline",
+      "parent_requirement": "R01",
+      "source_section": "truffnotes.md 14.2, 15.1-15.4, 20.3",
+      "title": "PDFium render/text/search/links/outline/page-ops/save and StaticLayout/TextPaintPlan to Canvas & PdfDocument for Cyrillic/RTL/CJK/emoji",
+      "owner_phase": "F00",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "D1_D2_D3_and_emulator",
+      "scenario_or_test_path": "tools/spikes/android/app/src/androidTest/kotlin/inkspace/spike/SpikeSurfacePdfInstrumentedTest.kt",
+      "status": "implemented_unverified",
+      "evidence_path": "docs/evidence/F00/report.md"
+    },
+    {
+      "id": "R34.workloads-and-protocol-frozen",
+      "parent_requirement": "R34",
+      "source_section": "truffnotes.md 21.1-21.2",
+      "title": "Workloads W0-W6, devices D1-D3, and quantile/latency/memory protocol frozen and calibrated on synthetic trace data",
+      "owner_phase": "F00",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_and_D1_D2_D3",
+      "scenario_or_test_path": "tools/spikes/check_manifest.py",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F00/report.md"
+    },
+    {
+      "id": "R36.surface-lifecycle-recreate",
+      "parent_requirement": "R36",
+      "source_section": "truffnotes.md 4.5-4.6",
+      "title": "Surface Epoch teardown and recreate during active draft and PDF tile rendering without use-after-release",
+      "owner_phase": "F00",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "D1_D2_D3_and_emulator",
+      "scenario_or_test_path": "tools/spikes/android/app/src/test/kotlin/inkspace/spike/StackVerificationTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F00/report.md"
+    }
+  ]
+}

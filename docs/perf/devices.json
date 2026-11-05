@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "frozen_at": "2026-11-05",
+  "owner_phase": "F00",
+  "notes": "Hardware target profiles D1/D2/D3 and compatibility emulator profiles E29/E33/E37. Emulator runs verify functional/ABI/page-size compatibility only and never substitute for physical hardware measurements.",
+  "hardware_profiles": [
+    {
+      "id": "D1",
+      "role": "Primary active EMR stylus reference (Samsung S Pen, high-refresh + 60Hz fallback)",
+      "manufacturer": "Samsung",
+      "model": "Galaxy Tab S9 FE (SM-X510) / Galaxy Tab S9 (SM-X710)",
+      "soc": "Exynos 1380 / Snapdragon 8 Gen 2",
+      "gpu": "Mali-G68 MP5 / Adreno 740",
+      "ram_mib": 6144,
+      "abi": "arm64-v8a",
+      "page_size_bytes": 4096,
+      "api_level": 34,
+      "firmware_reference": "One UI 6.1 (Android 14, build X510XXU / X710XXU)",
+      "display_refresh_hz": [60, 90, 120],
+      "stylus_capabilities": {
+        "tool_type": "TOOL_TYPE_STYLUS",
+        "pressure": true,
+        "tilt": true,
+        "orientation": true,
+        "hover": true,
+        "button_primary": true,
+        "sample_rate_hz": 240
+      },
+      "availability_in_current_env": "pending_hardware_attachment"
+    },
+    {
+      "id": "D2",
+      "role": "Non-Samsung active capacitive/USI/MPP stylus tablet",
+      "manufacturer": "Lenovo / Xiaomi",
+      "model": "Lenovo Tab P12 (TB370FU) / Xiaomi Pad 6 (23043RP34G)",
+      "soc": "MediaTek Dimensity 7050 / Snapdragon 870",
+      "gpu": "Mali-G68 MC4 / Adreno 650",
+      "ram_mib": 8192,
+      "abi": "arm64-v8a",
+      "page_size_bytes": 4096,
+      "api_level": 34,
+      "firmware_reference": "ZUI 15 / HyperOS 1.0 (Android 14)",
+      "display_refresh_hz": [60, 120],
+      "stylus_capabilities": {
+        "tool_type": "TOOL_TYPE_STYLUS",
+        "pressure": true,
+        "tilt": true,
+        "orientation": false,
+        "hover": true,
+        "button_primary": true,
+        "sample_rate_hz": 240
+      },
+      "availability_in_current_env": "pending_hardware_attachment"
+    },
+    {
+      "id": "D3",
+      "role": "Lower target boundary (~4 GiB RAM, 60 Hz baseline tablet, passive/finger + optional stylus)",
+      "manufacturer": "Samsung / Lenovo",
+      "model": "Galaxy Tab A9+ (SM-X210) / Tab M11 (TB330FU)",
+      "soc": "Snapdragon 695 / Helio G88",
+      "gpu": "Adreno 619 / Mali-G52 MC2",
+      "ram_mib": 4096,
+      "abi": "arm64-v8a",
+      "page_size_bytes": 4096,
+      "api_level": 34,
+      "firmware_reference": "Android 14 baseline 4 GiB profile",
+      "display_refresh_hz": [60],
+      "stylus_capabilities": {
+        "tool_type": "TOOL_TYPE_FINGER",
+        "pressure": false,
+        "tilt": false,
+        "orientation": false,
+        "hover": false,
+        "button_primary": false,
+        "sample_rate_hz": 120
+      },
+      "availability_in_current_env": "pending_hardware_attachment"
+    }
+  ],
+  "emulator_profiles": [
+    {
+      "id": "E29",
+      "role": "Minimum supported API compatibility (Android 10)",
+      "api_level": 29,
+      "abi": "x86_64",
+      "page_size_bytes": 4096,
+      "ram_mib": 4096
+    },
+    {
+      "id": "E33",
+      "role": "Android 13 mid-tier API compatibility",
+      "api_level": 33,
+      "abi": "x86_64",
+      "page_size_bytes": 4096,
+      "ram_mib": 4096
+    },
+    {
+      "id": "E35_16K",
+      "role": "16 KiB page-size native library alignment and load verification target",
+      "api_level": 35,
+      "abi": "arm64-v8a / x86_64",
+      "page_size_bytes": 16384,
+      "ram_mib": 4096
+    }
+  ]
+}
