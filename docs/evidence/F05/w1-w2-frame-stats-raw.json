@@ -1,0 +1,48 @@
+{
+  "phase_id": "F05",
+  "seed": 20261105,
+  "target_frame_budget_ms": 16.67,
+  "workloads": {
+    "W1": {
+      "pages": 100,
+      "strokes": 10000,
+      "samples_per_stroke": 64,
+      "total_samples": 640000,
+      "measured_frames": 40,
+      "p50_ms": 0.8181,
+      "p95_ms": 2.9695,
+      "p99_ms": 3.7127,
+      "visible_strokes_in_viewport": 290,
+      "culled_objects": 9710,
+      "same_scene_pan_geometry_rebuilds": 0
+    },
+    "W2": {
+      "pages": 500,
+      "strokes": 100000,
+      "samples_per_stroke": 64,
+      "total_samples": 6400000,
+      "max_visible_objects_cap": 1000,
+      "measured_frames": 40,
+      "p50_ms": 6.4151,
+      "p95_ms": 7.5953,
+      "p99_ms": 15.0849,
+      "visible_strokes_in_viewport": 490,
+      "culled_objects": 99510,
+      "same_scene_pan_geometry_rebuilds": 0
+    }
+  },
+  "surface_lifecycle": {
+    "destroy_recreate_cycles": 20,
+    "stale_epoch_rejected_with_invalid_surface": true
+  },
+  "memory_accounting": {
+    "derived_cache_bytes": 449280,
+    "derived_cache_cap_bytes": 33554432,
+    "tile_cache_bytes": 0,
+    "tile_cache_cap_bytes": 33554432,
+    "controlled_graphics_bytes": 2097152,
+    "peak_controlled_graphics_bytes": 2097152,
+    "controlled_graphics_cap_bytes": 100663296,
+    "sdk_reported_graphics_bytes": 0
+  }
+}

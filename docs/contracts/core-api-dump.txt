@@ -72,6 +72,18 @@ sealed interface StartError : CoreError {
 data class InvalidConfiguration(val reason: String) : StartError
 data class StorageInitFailed(val reason: String) : StartError
 data class AlreadyClosed(val reason: String) : StartError
+sealed interface RenderError : CoreError {
+data class WrongThread(val expectedThread: String, val actualThread: String) : RenderError
+data class InvalidSurface(val surfaceEpoch: Long, val reason: String) : RenderError
+data class InvalidResize(val widthPx: Int, val heightPx: Int, val reason: String) : RenderError
+data class MemoryBudgetExceeded(
+val category: String,
+val requestedBytes: Long,
+val currentBytes: Long,
+val maxBytes: Long
+data class GeometryFailure(val strokeId: String, val reason: String) : RenderError
+data class TextLayoutFailure(val objectId: String, val reason: String) : RenderError
+data class ResourceFailure(val assetId: String, val reason: String) : RenderError
 value class DocumentId(val value: String) {
 value class SpaceId(val value: String) {
 value class PageId(val value: String) {
@@ -587,11 +599,17 @@ data class GeometryRequest(
 val strokeId: ObjectId,
 val origin: DocPoint,
 val samples: List<DocPoint>,
-val baseWidthPt: Double
+val baseWidthPt: Double,
+val brushId: String = "ball",
+val smoothingVersion: Int = 1,
+val scaleBucket: Int = 0
 data class PathArtifact(
 val strokeId: ObjectId,
 val bounds: DocRect,
-val segmentCount: Int
+val segmentCount: Int,
+val origin: DocPoint = DocPoint(bounds.left, bounds.top),
+val relativePoints: List<DocPoint> = emptyList(),
+val estimatedBytes: Long = 64L + segmentCount.toLong() * 16L
 data class TextLayoutRequest(
 val text: String,
 val fontSizePt: Double,
@@ -600,7 +618,9 @@ val isRtl: Boolean = false
 data class TextLayout(
 val widthPt: Double,
 val heightPt: Double,
-val lineCount: Int
+val lineCount: Int,
+val lines: List<String> = emptyList(),
+val estimatedBytes: Long = 128L + lines.sumOf { it.length.toLong() * 2L }
 data class ResourceRequest(
 val asset: AssetId,
 val byteBudget: Long
@@ -699,6 +719,7 @@ data class RenderPage(val pageIndex: Int, val width: Int, val height: Int) : Pdf
 sealed interface RenderJob {
 data class Draw(val bounds: DocRect, val revision: Revision) : RenderJob
 data class Snapshot(val region: DocRect, val scale: Float) : RenderJob
+data class PdfOverlay(val pageId: PageId, val pageBounds: DocRect, val revision: Revision) : RenderJob
 data class JobSpec(
 val jobId: String,
 val priority: Int
@@ -733,6 +754,118 @@ fun getLayer(layerId: LayerId): LayerDescriptor? = null
 fun parentGroupOf(id: ObjectId): ObjectId? = null
 val pages: List<PageDescriptor> get() = emptyList()
 val layers: List<LayerDescriptor> get() = emptyList()
+class TileArtifact(
+val tileKey: String,
+val assetId: AssetId? = null,
+val pageIndex: Int = 0,
+val docBounds: DocRect,
+val widthPx: Int,
+val heightPx: Int,
+val scaleBucket: Int = 0,
+val byteSize: Long
+fun pixelAt(x: Int, y: Int): Int {
+fun copyPixels(): IntArray = pixels.copyOf()
+data class DraftStrokeSceneItem(
+val draftId: ObjectId,
+val spaceId: SpaceId,
+val layerId: LayerId,
+val bounds: DocRect,
+val payload: StrokePayload,
+val transform: AffineTransform2D = AffineTransform2D.IDENTITY,
+val style: ObjectStyle = ObjectStyle()
+sealed interface EphemeralOverlayItem {
+data class SelectionBounds(
+val rect: DocRect,
+val colorArgb: Int = 0xFF2563EB.toInt(),
+val strokeWidthPt: Double = 1.5
+data class HoverCursor(
+val point: DocPoint,
+val radiusPt: Double = 4.0,
+val colorArgb: Int = 0x802563EB.toInt()
+data class LaserTrail(
+val origin: DocPoint,
+val relativePoints: List<DocPoint>,
+val colorArgb: Int = 0xFFFF1744.toInt(),
+val widthPt: Double = 3.0
+val frozenPoints: List<DocPoint> = java.util.List.copyOf(relativePoints)
+data class Scene(
+val snapshot: DocumentSnapshot,
+val activeSpaceId: SpaceId = SpaceId("space-1"),
+val camera: CameraTransform = CameraTransform(),
+val viewportWidthPx: Int = 1080,
+val viewportHeightPx: Int = 1920,
+val surfaceEpoch: SurfaceEpoch = SurfaceEpoch(1L),
+val resizeGeneration: ResizeGeneration = ResizeGeneration(1L),
+val backgroundColorArgb: Int = 0xFFFFFFFF.toInt(),
+val clipToPageBounds: Boolean = true,
+val draftStrokes: List<DraftStrokeSceneItem> = emptyList(),
+val ephemeralOverlays: List<EphemeralOverlayItem> = emptyList(),
+val changeSet: ChangeSet? = null,
+val tiles: List<TileArtifact> = emptyList()
+val frozenDraftStrokes: List<DraftStrokeSceneItem> = java.util.List.copyOf(draftStrokes)
+val frozenEphemeralOverlays: List<EphemeralOverlayItem> = java.util.List.copyOf(ephemeralOverlays)
+val frozenTiles: List<TileArtifact> = java.util.List.copyOf(tiles)
+enum class RenderTargetKind {
+sealed interface RenderRequest {
+val scene: Scene
+data class Draw(
+val capturePixels: Boolean = false
+data class Snapshot(
+val regionDoc: DocRect,
+val scale: Double = 1.0
+data class PdfOverlay(
+val pageId: PageId,
+val pageBoundsDoc: DocRect
+data class FrameStats(
+val revision: Revision,
+val surfaceEpoch: SurfaceEpoch,
+val resizeGeneration: ResizeGeneration,
+val targetKind: RenderTargetKind,
+val totalSceneObjects: Int,
+val visiblePagesCount: Int,
+val visibleObjectsCount: Int,
+val culledObjectsCount: Int,
+val drawnStrokesCount: Int,
+val drawnShapesCount: Int,
+val drawnTextsCount: Int,
+val drawnTilesCount: Int,
+val draftStrokesCount: Int,
+val ephemeralOverlaysCount: Int,
+val geometryCacheHits: Int,
+val geometryRebuildsCount: Int,
+val textCacheHits: Int,
+val textRebuildsCount: Int,
+val tileCacheHits: Int,
+val scaleBucket: Int,
+val frameDurationNanos: Long,
+val derivedCacheBytes: Long,
+val tileCacheBytes: Long,
+val controlledGraphicsBytes: Long,
+val sdkReportedGraphicsBytes: Long,
+val pinnedSnapshotsCount: Int
+val frameDurationMs: Double
+sealed interface RenderReply {
+val stats: FrameStats
+class FrameDrawn(
+val widthPx: Int,
+val heightPx: Int,
+fun hasCapturedPixels(): Boolean = pixels != null
+fun copyCapturedPixels(): IntArray? = pixels?.copyOf()
+fun pixelAt(x: Int, y: Int): Int {
+val buf = pixels ?: return 0
+class SnapshotRendered(
+val widthPx: Int,
+val heightPx: Int,
+fun copyPixels(): IntArray = pixels.copyOf()
+fun pixelAt(x: Int, y: Int): Int {
+class PdfOverlayRendered(
+val pageId: PageId,
+val widthPt: Int,
+val heightPt: Int,
+fun pdfByteSize(): Int = encodedPdf.size
+fun copyPdfBytes(): ByteArray = encodedPdf.copyOf()
+fun copyPreviewPixels(): IntArray = previewPixels.copyOf()
+fun previewPixelAt(x: Int, y: Int): Int {
 enum class MemoryCategory(val defaultCapBytes: Long) {
 enum class MemoryPressureLevel {
 enum class InputActionKind(val isTerminal: Boolean) {

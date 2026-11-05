@@ -529,8 +529,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f05",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-render/src/test/kotlin/inkspace/render/F05WorkloadBenchmarksTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F05/report.md"
     },
     {

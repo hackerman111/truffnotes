@@ -31,6 +31,9 @@ project(":tn-test-support").projectDir = file("modules/tn-test-support")
 include(":tn-store")
 project(":tn-store").projectDir = file("modules/tn-store")
 
+include(":tn-render")
+project(":tn-render").projectDir = file("modules/tn-render")
+
 include(":tn-platform")
 project(":tn-platform").projectDir = file("modules/tn-platform")
 

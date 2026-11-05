@@ -36,6 +36,7 @@ kotlin {
 dependencies {
     implementation(project(":tn-core"))
     implementation(project(":tn-store"))
+    implementation(project(":tn-render"))
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

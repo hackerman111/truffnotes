@@ -25,14 +25,24 @@ data class GeometryRequest(
     val strokeId: ObjectId,
     val origin: DocPoint,
     val samples: List<DocPoint>,
-    val baseWidthPt: Double
+    val baseWidthPt: Double,
+    val brushId: String = "ball",
+    val smoothingVersion: Int = 1,
+    val scaleBucket: Int = 0
 )
 
 data class PathArtifact(
     val strokeId: ObjectId,
     val bounds: DocRect,
-    val segmentCount: Int
-)
+    val segmentCount: Int,
+    val origin: DocPoint = DocPoint(bounds.left, bounds.top),
+    val relativePoints: List<DocPoint> = emptyList(),
+    val estimatedBytes: Long = 64L + segmentCount.toLong() * 16L
+) {
+    init {
+        require(segmentCount >= 0) { "segmentCount must be non-negative" }
+    }
+}
 
 @Serializable
 data class TextLayoutRequest(
@@ -45,7 +55,9 @@ data class TextLayoutRequest(
 data class TextLayout(
     val widthPt: Double,
     val heightPt: Double,
-    val lineCount: Int
+    val lineCount: Int,
+    val lines: List<String> = emptyList(),
+    val estimatedBytes: Long = 128L + lines.sumOf { it.length.toLong() * 2L }
 )
 
 @Serializable
@@ -233,8 +245,12 @@ sealed interface PdfRequest {
 sealed interface RenderJob {
     @Serializable
     data class Draw(val bounds: DocRect, val revision: Revision) : RenderJob
+
     @Serializable
     data class Snapshot(val region: DocRect, val scale: Float) : RenderJob
+
+    @Serializable
+    data class PdfOverlay(val pageId: PageId, val pageBounds: DocRect, val revision: Revision) : RenderJob
 }
 
 @Serializable

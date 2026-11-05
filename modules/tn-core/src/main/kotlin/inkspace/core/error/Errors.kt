@@ -67,3 +67,18 @@ sealed interface StartError : CoreError {
     data class StorageInitFailed(val reason: String) : StartError
     data class AlreadyClosed(val reason: String) : StartError
 }
+
+sealed interface RenderError : CoreError {
+    data class WrongThread(val expectedThread: String, val actualThread: String) : RenderError
+    data class InvalidSurface(val surfaceEpoch: Long, val reason: String) : RenderError
+    data class InvalidResize(val widthPx: Int, val heightPx: Int, val reason: String) : RenderError
+    data class MemoryBudgetExceeded(
+        val category: String,
+        val requestedBytes: Long,
+        val currentBytes: Long,
+        val maxBytes: Long
+    ) : RenderError
+    data class GeometryFailure(val strokeId: String, val reason: String) : RenderError
+    data class TextLayoutFailure(val objectId: String, val reason: String) : RenderError
+    data class ResourceFailure(val assetId: String, val reason: String) : RenderError
+}

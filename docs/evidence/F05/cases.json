@@ -1,0 +1,48 @@
+{
+  "phase": "F05",
+  "title": "Единый renderer, culling и ресурсные caches (:tn-render)",
+  "seed": 20261105,
+  "requirements_verified": [
+    "R05",
+    "R07",
+    "R21",
+    "R34"
+  ],
+  "test_suites": [
+    {
+      "suite": "inkspace.render.F05SceneAndGoldenTest",
+      "cases": [
+        "camera_transform_page_clip_z_order_hidden_layers_and_opacity_render_correctly",
+        "highlighter_self_overlap_does_not_double_darken",
+        "camera_relative_double_to_float_projection_preserves_precision_at_1e7_pt",
+        "draft_stroke_to_committed_stroke_produces_identical_pixels_and_shared_replay_targets_match"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.render.F05CullingCachesAndBudgetsTest",
+      "cases": [
+        "same_scene_pan_does_not_rebuild_geometry_and_culls_offscreen_objects",
+        "changeset_dirty_region_invalidates_only_modified_objects",
+        "cpu_tile_and_derived_cache_budgets_evict_lru_and_reject_oversize_and_invalid_surface"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.render.F05WorkloadBenchmarksTest",
+      "cases": [
+        "w1_and_w2_synthetic_scene_benchmarks_meet_p95_frame_time_culling_and_memory_caps"
+      ],
+      "raw_profile_path": "docs/evidence/F05/w1-w2-frame-stats-raw.json",
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.render.RendererAndroidInstrumentedTest",
+      "cases": [
+        "rendererDrawsToAndroidBitmapCanvasAndGeneratesSnapshotAndPdfOverlay"
+      ],
+      "compile_status": "PASS (:tn-render:assembleDebugAndroidTest)",
+      "device_execution_status": "PENDING_PHYSICAL_OR_AVD_DEVICE"
+    }
+  ]
+}

@@ -32,15 +32,20 @@ class FakeGeometryPort : GeometryPort {
         if (request.samples.isEmpty()) {
             return Outcome.Failure(GeometryError.ComputationFailed("Empty sample list"))
         }
-        val minX = request.samples.minOf { it.x } + request.origin.x
-        val maxX = request.samples.maxOf { it.x } + request.origin.x
-        val minY = request.samples.minOf { it.y } + request.origin.y
-        val maxY = request.samples.maxOf { it.y } + request.origin.y
+        val halfWidth = (request.baseWidthPt * 0.5).coerceAtLeast(0.5)
+        val minX = request.samples.minOf { it.x } + request.origin.x - halfWidth
+        val maxX = request.samples.maxOf { it.x } + request.origin.x + halfWidth
+        val minY = request.samples.minOf { it.y } + request.origin.y - halfWidth
+        val maxY = request.samples.maxOf { it.y } + request.origin.y + halfWidth
+        val frozenPoints = java.util.List.copyOf(request.samples)
         return Outcome.Success(
             PathArtifact(
                 strokeId = request.strokeId,
                 bounds = DocRect(minX, minY, maxX, maxY),
-                segmentCount = request.samples.size
+                segmentCount = request.samples.size,
+                origin = request.origin,
+                relativePoints = frozenPoints,
+                estimatedBytes = 64L + frozenPoints.size.toLong() * 16L
             )
         )
     }
@@ -49,9 +54,17 @@ class FakeGeometryPort : GeometryPort {
 class FakeTextPort : TextPort {
     override fun layout(request: TextLayoutRequest): Outcome<TextLayout, TextError> {
         val approxWidth = (request.text.length * request.fontSizePt * 0.6).coerceAtMost(request.maxWidthPt)
-        val lines = ((request.text.length * request.fontSizePt * 0.6) / request.maxWidthPt).toInt().coerceAtLeast(1)
-        val height = lines * request.fontSizePt * 1.2
-        return Outcome.Success(TextLayout(widthPt = approxWidth, heightPt = height, lineCount = lines))
+        val linesCount = ((request.text.length * request.fontSizePt * 0.6) / request.maxWidthPt).toInt().coerceAtLeast(1)
+        val height = linesCount * request.fontSizePt * 1.2
+        val splitLines = if (request.text.isEmpty()) listOf("") else request.text.split('\n')
+        return Outcome.Success(
+            TextLayout(
+                widthPt = approxWidth,
+                heightPt = height,
+                lineCount = linesCount,
+                lines = java.util.List.copyOf(splitLines)
+            )
+        )
     }
 }
 

@@ -214,10 +214,10 @@ W4 — stress, не обещание 60 FPS при 10000 одновременн�
 
 **API:** core RenderRequest/RenderReply/Scene/PathArtifact/TextLayout/TileArtifact; `Renderer.render(request: RenderRequest): Outcome<FrameStats, RenderError>` только render executor. RenderPort dispatch-ит Draw/Snapshot/PdfOverlay. CanvasReplay один для Surface, image и PdfDocument targets; export target имеет собственные mutable Canvas/Paint на bounded export executor.
 
-- [ ] F05.1 Ввести scene/golden tests camera transforms, clipping/z-order/highlighter compositing, layer opacity, camera-relative Double→Float и draft→committed consistency. Geometry provider пока fake, без повторного brush implementation.
-- [ ] F05.2 Реализовать culling, cached Android Path/RenderNode, grouped Canvas draw commands, dirty regions и cache keys по content versions/scale/font/resources. `same_scene_pan` не rebuilds всю геометрию.
-- [ ] F05.3 Добавить общий CPU/graphics budget, tile/RenderNode eviction, max2 snapshots и acknowledged Surface/resource release. Отказ memory admission/invalid Surface/resize возвращает typed event; allocator OOM не считается надёжно восстанавливаемой ошибкой. Проверить managed allocations/GC и отсутствие per-sample объектов; графические allocations SDK измерять отдельно от собственных estimates.
-- [ ] F05.4 Проверить W1/W2 синтетическими immutable scene fixtures; hardware Canvas каждого заявленного device/API профиля, destroy/recreate; сохранить raw frame/allocation stats.
+- [x] F05.1 Ввести scene/golden tests camera transforms, clipping/z-order/highlighter compositing, layer opacity, camera-relative Double→Float и draft→committed consistency. Geometry provider пока fake, без повторного brush implementation.
+- [x] F05.2 Реализовать culling, cached Android Path/RenderNode, grouped Canvas draw commands, dirty regions и cache keys по content versions/scale/font/resources. `same_scene_pan` не rebuilds всю геометрию.
+- [x] F05.3 Добавить общий CPU/graphics budget, tile/RenderNode eviction, max2 snapshots и acknowledged Surface/resource release. Отказ memory admission/invalid Surface/resize возвращает typed event; allocator OOM не считается надёжно восстанавливаемой ошибкой. Проверить managed allocations/GC и отсутствие per-sample объектов; графические allocations SDK измерять отдельно от собственных estimates.
+- [x] F05.4 Проверить W1/W2 синтетическими immutable scene fixtures; hardware Canvas каждого заявленного device/API профиля, destroy/recreate; сохранить raw frame/allocation stats.
 
 **Gate:** `rtk proxy ./gradlew :tn-render:testDebugUnitTest :tn-render:connectedDebugAndroidTest` и Android renderer tests → PASS; deterministic images сравниваются в согласованном color space, антиалиас tolerance ≤1px edge/≤2 per 8-bit channel вне edge. W1/W2 frame и graphics/PSS budgets раздела4 соблюдены для renderer scene. Physical pen latency ещё не заявляется.
 
