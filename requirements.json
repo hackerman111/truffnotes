@@ -481,9 +481,9 @@
         "G1",
         "G2"
       ],
-      "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f02",
-      "status": "planned",
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-core/src/test/kotlin/inkspace/core/F02TransactionTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F02/report.md"
     },
     {

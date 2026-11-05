@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "phase": "F02",
+  "frozen_at": "2026-11-05",
+  "seed": 20261105,
+  "cases": [
+    {
+      "id": "R07.stroke-transaction-roundtrip",
+      "parent_requirement": "R07",
+      "source_section": "truffnotes.md 6.1-6.4, android-workspace.md 5-6",
+      "title": "Editable StrokePayload creation, transform, inverse roundtrip, and deterministic CBOR digest",
+      "owner_phase": "F02",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-core/src/test/kotlin/inkspace/core/F02TransactionTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F02/report.md"
+    },
+    {
+      "id": "R10.group-hierarchy-acyclicity-depth",
+      "parent_requirement": "R10",
+      "source_section": "truffnotes.md 8.3, android-workspace.md 5",
+      "title": "Nested group validation: rejects self/indirect cycles, duplicate parent ownership, and depth > maxGroupDepth (32)",
+      "owner_phase": "F02",
+      "required_profiles": ["G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-core/src/test/kotlin/inkspace/core/F02TransactionTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F02/report.md"
+    },
+    {
+      "id": "R15.page-transactions-and-undo",
+      "parent_requirement": "R15",
+      "source_section": "truffnotes.md 3.9, 12",
+      "title": "Atomic AddPage, RemovePage, ReorderPage, ResizePage mutations and inverse restoration",
+      "owner_phase": "F02",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-core/src/test/kotlin/inkspace/core/F02TransactionTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F02/report.md"
+    },
+    {
+      "id": "R17.layer-lock-and-transactions",
+      "parent_requirement": "R17",
+      "source_section": "truffnotes.md 13, android-workspace.md 5-6",
+      "title": "Layer CRUD/reorder/style/lock enforcement in core validatePlan/applyPlan",
+      "owner_phase": "F02",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-core/src/test/kotlin/inkspace/core/F02TransactionTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F02/report.md"
+    },
+    {
+      "id": "R28.versioned-writeset-codec-replay",
+      "parent_requirement": "R28",
+      "source_section": "truffnotes.md 18.1-18.4, android-workspace.md 6, 8",
+      "title": "Versioned WriteSet/WriteRecord CBOR/JSON codec and replayWriteSet validation independent of JVM layout",
+      "owner_phase": "F02",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-core/src/test/kotlin/inkspace/core/F02TransactionTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F02/report.md"
+    },
+    {
+      "id": "R31.atomic-undo-redo-gesture-grouping",
+      "parent_requirement": "R31",
+      "source_section": "truffnotes.md 19.1, android-workspace.md 6",
+      "title": "Atomic batch rejection, logical gesture grouping in History, and 10,000 seeded sequence undo/redo property test",
+      "owner_phase": "F02",
+      "required_profiles": ["G0", "G1", "G2"],
+      "required_device_class": "host_jvm",
+      "scenario_or_test_path": "modules/tn-core/src/test/kotlin/inkspace/core/F02TransactionTest.kt",
+      "status": "verified",
+      "evidence_path": "docs/evidence/F02/report.md"
+    }
+  ]
+}

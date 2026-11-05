@@ -51,6 +51,24 @@ data class DocRect(
     fun intersects(other: DocRect): Boolean {
         return left <= other.right && right >= other.left && top <= other.bottom && bottom >= other.top
     }
+
+    fun union(other: DocRect): DocRect {
+        return DocRect(
+            left = minOf(left, other.left),
+            top = minOf(top, other.top),
+            right = maxOf(right, other.right),
+            bottom = maxOf(bottom, other.bottom)
+        )
+    }
+
+    fun translate(dx: Double, dy: Double): DocRect {
+        return DocRect(
+            left = left + dx,
+            top = top + dy,
+            right = right + dx,
+            bottom = bottom + dy
+        )
+    }
 }
 
 @Serializable

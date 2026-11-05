@@ -1,7 +1,7 @@
 # Core Contract v1 (`:tn-core`)
 
 ## 1. Назначение и границы модуля
-`:tn-core` — единственный владелец базовых типов, единиц измерения, типизированных идентификаторов, контрактов данных, портов и функции валидации планов изменений (`validatePlan`).
+`:tn-core` — единственный владелец базовых типов, единиц измерения, типизированных идентификаторов, контрактов данных, портов и единого транзакционного конвейера (`validatePlan` → `applyPlan` → `replayWriteSet`).
 
 ### Строгие запреты для `:tn-core`:
 - **Никаких зависимостей от Android SDK** (`android.*`, `androidx.*`).
@@ -29,17 +29,20 @@
 
 ---
 
-## 4. Единый путь изменений и валидации (`inkspace.core.mutation`)
-- Любое изменение документа оформляется как неизменяемый `EditPlan`:
-  - `base: DocVersion` — базовая ревизия, относительно которой построен план.
-  - `preconditions: List<Precondition>` — ожидаемые версии объектов.
-  - `mutations: List<Mutation>` — непустой список атомарных мутаций (`InsertObject`, `RemoveObject`, `UpdatePayload`, `MoveObject`).
-  - `gesture: GestureId`, `label: UndoLabel` — метаданные для группировки в истории Undo/Redo.
-- Функция `validatePlan(document: DocumentRead, plan: EditPlan, limits: Limits): Outcome<ValidatedPlan, EditError>`:
-  - Проверяет совпадение `plan.base.revision == document.version.revision` (иначе `EditError.StaleRevision`).
-  - Проверяет предусловия, существование объектов (`ResidencyState`), отсутствие блокировок (`isLocked` -> `EditError.LockedEntity`).
-  - Проверяет соблюдение лимитов `Limits` (`EditError.LimitExceeded`).
-  - При любой ошибке весь план отвергается целиком без частичного применения. Конструктор `ValidatedPlan` закрыт (`internal`) и создаётся только внутри `:tn-core`.
+## 4. Чанковая модель документа и атомарные транзакции (`inkspace.core.model`, `inkspace.core.mutation`, `inkspace.core.codec`)
+- **Чанковая директория (`ChunkedObjectDirectory`):**
+  - Двухуровневое персистентное радикс-дерево `64x64` (`4096` листовых чанков) со структурным разделением (`structural sharing`).
+  - Одиночная правка объекта на корпусе `W2` (`100 000` объектов) клонирует ровно 1 листовой чанк из 4096 (`p50 = 1904 B`, `p95 = 2160 B`, `p99 = 2256 B`), без копирования всей коллекции объектов.
+- **Снимки и учёт памяти (`DocumentSnapshot`, `SnapshotPinTracker`, `History`):**
+  - `DocumentState.snapshot()` возвращает глубоко неизменяемый `DocumentSnapshot` за $O(1)$.
+  - `SnapshotPinTracker` учитывает суммарный бюджет закреплённых снимков и `History.pinnedBytes`.
+- **Единый путь изменений (`validatePlan` → `applyPlan`):**
+  - `validatePlan(document: DocumentRead, plan: EditPlan, limits: Limits): Outcome<ValidatedPlan, EditError>` проверяет базовую ревизию (`StaleRevision`), предусловия (`PreconditionFailed`), резидентность (`EntityNotResident` vs `EntityNotFound`), блокировки объектов и слоёв (`LockedEntity`), ацикличность и глубину групп (`CycleDetected`, `LimitExceeded`), а также отвергает пустые изменения (`NoOpPlan`) без увеличения ревизии.
+  - `applyPlan(state: DocumentState, validatedPlan: ValidatedPlan): Outcome<AppliedEdit, EditError>` атомарно применяет план, формирует точный `ChangeSet` (`oldBounds`, `newBounds`), обратимый `inversePlan` и версионированный `WriteSet`.
+  - `History` группирует последовательные шаги одного `GestureId` в одну логическую операцию `undo`/`redo`.
+- **Версионированный кодек записи и воспроизведения (`WriteSet`, `WriteSetCodec`, `replayWriteSet`):**
+  - Дайджесты payload (`payloadDigest`) вычисляются детерминированным 64-bit FNV-1a поверх канонического CBOR (`CoreCodec.computePayloadDigest`) и не зависят от раскладки объектов в памяти JVM.
+  - `replayWriteSet` проводит восстановление/импорт через единственный редуктор `validatePlan` → `applyPlan` с проверкой контрольных дайджестов и версий записей.
 
 ---
 
@@ -49,5 +52,5 @@
   - Асинхронные порты (`StoragePort`, `PdfPort`, `RenderPort`, `JobSink`) предоставляют неблокирующий метод `trySubmit(...)`.
   - Каждая очередь обязана иметь жёсткий предел ёмкости. При исчерпании лимита возвращается `Outcome.Failure(SubmitError.QueueOverflow(currentDepth, maxDepth))` — неограниченные очереди (`Channel.UNLIMITED`) запрещены.
 - **Thread Confinement:**
-  - Объекты `EditPlan`, `ObjectPayload`, `DocVersion`, `ChangeSet` глубоко неизменяемы и безопасны для передачи между потоками.
+  - Объекты `EditPlan`, `ObjectPayload`, `DocVersion`, `ChangeSet`, `DocumentSnapshot`, `WriteSet` глубоко неизменяемы и безопасны для передачи между потоками.
   - Чтение состояния через `DocumentRead` различает `ResidencyState.Present`, `ResidencyState.NotResident` и `ResidencyState.Missing`.

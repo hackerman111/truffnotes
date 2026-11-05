@@ -6,11 +6,13 @@ sealed interface EditError : CoreError {
     data class PreconditionFailed(val message: String) : EditError
     data class LimitExceeded(val limit: String, val current: Long, val max: Long) : EditError
     data class EntityNotFound(val id: String) : EditError
+    data class EntityNotResident(val id: String) : EditError
     data class NonFiniteCoordinate(val coordinate: String) : EditError
     data class CycleDetected(val groupId: String) : EditError
     data class LockedEntity(val id: String) : EditError
     data class StaleRevision(val expected: Long, val actual: Long) : EditError
     data class InvalidPayload(val reason: String) : EditError
+    data class NoOpPlan(val reason: String) : EditError
 }
 
 data class SerializationError(val message: String, val cause: String? = null) : CoreError

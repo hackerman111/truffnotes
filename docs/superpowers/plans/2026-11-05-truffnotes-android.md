@@ -172,11 +172,11 @@ W4 — stress, не обещание 60 FPS при 10000 одновременн�
 
 **API:** `validatePlan(read: DocumentRead, plan: EditPlan, limits: Limits): Outcome<ValidatedPlan, EditError>`; `applyPlan(state: DocumentState, plan: ValidatedPlan): Outcome<AppliedEdit, EditError>`; `DocumentState.snapshot(): DocumentSnapshot`, `History.undo/redo` дают EditPlan. DocumentRead различает Present/NotResident/Missing.
 
-- [ ] F02.1 До реализации добавить `atomic_plan`, `inverse_roundtrip`, `revision_precondition`, `locked_entities`, `group_cycles`, `missing_vs_nonresident`: malformed batch целиком отвергается, без частичной мутации.
-- [ ] F02.2 Реализовать chunked document directory/immutable payload refs и mutation set. Не копировать всю коллекцию objects при каждом штрихе; измерить allocations на W2 single-object edit.
-- [ ] F02.3 Реализовать точный ChangeSet old/new bounds, inverse deltas и logical gesture grouping. Рисование/resize/clear page дают по одной истории; failed/no-op plan не создаёт revision.
-- [ ] F02.4 Добавить property test: seed-фиксированные последовательности create/style/transform/delete/group/layer/page → Undo всех → исходная модель; Redo → финальная; scene ordering/links/asset references валидны.
-- [ ] F02.5 Ввести versioned persisted write-set/record codec и replay validation; identity/payload versions не зависят от JVM object layout. Один codec используется store/exchange. Snapshot pins измеряются вместе с history.
+- [x] F02.1 До реализации добавить `atomic_plan`, `inverse_roundtrip`, `revision_precondition`, `locked_entities`, `group_cycles`, `missing_vs_nonresident`: malformed batch целиком отвергается, без частичной мутации.
+- [x] F02.2 Реализовать chunked document directory/immutable payload refs и mutation set. Не копировать всю коллекцию objects при каждом штрихе; измерить allocations на W2 single-object edit.
+- [x] F02.3 Реализовать точный ChangeSet old/new bounds, inverse deltas и logical gesture grouping. Рисование/resize/clear page дают по одной истории; failed/no-op plan не создаёт revision.
+- [x] F02.4 Добавить property test: seed-фиксированные последовательности create/style/transform/delete/group/layer/page → Undo всех → исходная модель; Redo → финальная; scene ordering/links/asset references валидны.
+- [x] F02.5 Ввести versioned persisted write-set/record codec и replay validation; identity/payload versions не зависят от JVM object layout. Один codec используется store/exchange. Snapshot pins измеряются вместе с history.
 
 **Gate:** `rtk proxy ./gradlew :tn-core:test` → все перечисленные suite PASS, ≥10000 generated transaction sequences; single-edit incremental allocations не растут линейно со всеми payload bytes W2. Core не зависит от Android и не публикует mutable backing collections/arrays.
 

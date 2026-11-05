@@ -2,16 +2,39 @@ val cbor: Cbor = Cbor {
 val json: Json = Json {
 val value = cbor.decodeFromByteArray<T>(bytes)
 val value = json.decodeFromString<T>(jsonString)
+fun computePayloadDigest(payload: ObjectPayload): Long {
+val bytes = encodeToCbor<ObjectPayload>(payload)
+fun fnv1a64(bytes: ByteArray): Long {
+data class WriteRecord(
+val entityKind: String,
+val entityId: String,
+val operation: String,
+val newVersion: Long,
+val expectedDigest: Long
+data class WriteSet(
+val schemaVersion: Int = CoreCodec.CURRENT_SCHEMA_VERSION,
+val documentId: DocumentId,
+val baseRevision: Revision,
+val newRevision: Revision,
+val plan: EditPlan,
+val records: List<WriteRecord>,
+val referencedAssets: Set<AssetId> = emptySet()
+fun encodeToCbor(writeSet: WriteSet): ByteArray = CoreCodec.encodeToCbor(writeSet)
+fun decodeFromCbor(bytes: ByteArray): Outcome<WriteSet, SerializationError> =
+fun encodeToJson(writeSet: WriteSet): String = CoreCodec.encodeToJson(writeSet)
+fun decodeFromJson(jsonString: String): Outcome<WriteSet, SerializationError> =
 sealed interface CoreError
 sealed interface EditError : CoreError {
 data class PreconditionFailed(val message: String) : EditError
 data class LimitExceeded(val limit: String, val current: Long, val max: Long) : EditError
 data class EntityNotFound(val id: String) : EditError
+data class EntityNotResident(val id: String) : EditError
 data class NonFiniteCoordinate(val coordinate: String) : EditError
 data class CycleDetected(val groupId: String) : EditError
 data class LockedEntity(val id: String) : EditError
 data class StaleRevision(val expected: Long, val actual: Long) : EditError
 data class InvalidPayload(val reason: String) : EditError
+data class NoOpPlan(val reason: String) : EditError
 data class SerializationError(val message: String, val cause: String? = null) : CoreError
 sealed interface GeometryError : CoreError {
 data class ComputationFailed(val reason: String) : GeometryError
@@ -58,23 +81,209 @@ val session: SessionKey,
 val resource: String,
 val contentVersion: Long,
 val generation: RequestGeneration
+data class AffineTransform2D(
+val m00: Double = 1.0,
+val m01: Double = 0.0,
+val m02: Double = 0.0,
+val m10: Double = 0.0,
+val m11: Double = 1.0,
+val m12: Double = 0.0
+fun translate(dx: Double, dy: Double): AffineTransform2D {
+val IDENTITY = AffineTransform2D()
+data class ObjectStyle(
+val opacity: Float = 1.0f,
+val isVisible: Boolean = true,
+val zOrder: Long = 0L
+data class PageDescriptor(
+val id: PageId,
+val spaceId: SpaceId,
+val widthPt: Double,
+val heightPt: Double
+data class LayerDescriptor(
+val id: LayerId,
+val pageId: PageId,
+val name: String,
+val opacity: Float = 1.0f,
+val isVisible: Boolean = true,
+val isLocked: Boolean = false
+data class SceneObject(
+val id: ObjectId,
+val space: SpaceId,
+val layer: LayerId,
+val bounds: DocRect,
+val payload: ObjectPayload,
+val transform: AffineTransform2D = AffineTransform2D.IDENTITY,
+val style: ObjectStyle = ObjectStyle(),
+val isLocked: Boolean = false,
+val version: Long = 1L,
+val payloadDigest: Long = CoreCodec.computePayloadDigest(payload)
+fun estimatedMemoryBytes(): Int {
+val payloadBytes = when (payload) {
+val id: ObjectId
+val space: SpaceId
+val layer: LayerId
+val bounds: DocRect
+val isLocked: Boolean
+val version: Long
+val residency: ResidencyState
+val residentBytes: Int
+data class Present(val obj: SceneObject) : DirectoryEntry {
+data class NonResident(
+val estimatedColdBytes: Int
+val entries: Map<ObjectId, DirectoryEntry>,
+val residentBytes: Long
+val leaves: Array<LeafChunk?>
+class ChunkedObjectDirectory internal constructor(
+val totalCount: Int,
+val totalResidentBytes: Long
+val h = mixHash(id)
+val b = branches[h and 63] ?: return null
+val leaf = b.leaves[(h ushr 6) and 63] ?: return null
+fun objectState(id: ObjectId): ResidencyState {
+fun getObject(id: ObjectId): SceneObject? {
+fun getObjectVersion(id: ObjectId): Long? {
+fun isObjectLocked(id: ObjectId): Boolean {
+val h = mixHash(entry.id)
+val i1 = h and 63
+val i2 = (h ushr 6) and 63
+val oldBranch = branches[i1]
+val oldLeaf = oldBranch?.leaves?.get(i2)
+val oldEntry = oldLeaf?.entries?.get(entry.id)
+val newMap = if (oldLeaf == null) {
+val m = LinkedHashMap<ObjectId, DirectoryEntry>(oldLeaf.entries.size + 1)
+val deltaCount = if (oldEntry == null) 1 else 0
+val deltaBytes = entry.residentBytes.toLong() - (oldEntry?.residentBytes?.toLong() ?: 0L)
+val newLeafBytes = (oldLeaf?.residentBytes ?: 0L) + deltaBytes
+val newLeaf = LeafChunk(newMap, newLeafBytes)
+val newLeaves = oldBranch?.leaves?.copyOf() ?: arrayOfNulls(64)
+val newBranches = branches.copyOf()
+val h = mixHash(id)
+val i1 = h and 63
+val i2 = (h ushr 6) and 63
+val oldBranch = branches[i1] ?: return this
+val oldLeaf = oldBranch.leaves[i2] ?: return this
+val oldEntry = oldLeaf.entries[id] ?: return this
+val deltaBytes = -oldEntry.residentBytes.toLong()
+val newLeaf: LeafChunk? = if (oldLeaf.entries.size == 1) {
+val m = LinkedHashMap<ObjectId, DirectoryEntry>(oldLeaf.entries.size)
+val newLeaves = oldBranch.leaves.copyOf()
+val newBranches = branches.copyOf()
+fun queryBounds(rect: DocRect): List<ObjectId> {
+val result = ArrayList<ObjectId>()
+fun allResidentObjects(): List<SceneObject> {
+val list = ArrayList<SceneObject>()
+fun totalLeafChunks(): Int {
+fun countSharedLeafChunks(other: ChunkedObjectDirectory): Int {
+val b1 = this.branches[i1]
+val b2 = other.branches[i1]
+val l1 = b1.leaves[i2]
+val l2 = b2.leaves[i2]
+fun estimateUnsharedStructureBytes(previous: ChunkedObjectDirectory): Long {
+val bCurr = this.branches[i1] ?: continue
+val bPrev = previous.branches[i1]
+val lCurr = bCurr.leaves[i2] ?: continue
+val lPrev = bPrev?.leaves?.get(i2)
+class DocumentSnapshot internal constructor(
+val kind: DocumentKind,
+val directory: ChunkedObjectDirectory,
+fun orderedSceneObjects(): List<SceneObject> {
+val layerOrder = HashMap<LayerId, Int>(layers.size)
+fun referencedAssets(): Set<AssetId> {
+val assets = LinkedHashSet<AssetId>()
+val payload = obj.payload
+fun verifyInvariants(): Boolean {
+val pageIds = pageMap.keys
+val layerIds = layerMap.keys
+val resident = directory.allResidentObjects()
+val seenMembers = HashSet<ObjectId>()
+val memberObj = directory.getObject(m) ?: return false
+val targetPage = p.targetPage
+fun contentFingerprint(): Long {
+val sb = StringBuilder(256)
+fun estimatedPinnedBytes(): Long {
+class DocumentState private constructor(
+val kind: DocumentKind,
+fun snapshot(): DocumentSnapshot {
+fun registerNonResidentObject(
+fun putResidentObjectDirect(obj: SceneObject) {
+val nextParents = LinkedHashMap(currentParentGroups)
+fun createInitial(
+val pages = listOf(initialPage)
+val layers = listOf(initialLayer)
+class SnapshotLease internal constructor(
+val snapshot: DocumentSnapshot,
+val pinnedBytes: Long,
+class SnapshotPinTracker(
+val maxTotalPinnedBytes: Long = 16_000_000L
+fun currentSnapshotBytes(): Long = snapshotPinnedBytes
+fun currentTotalBytes(history: History): Long = snapshotPinnedBytes + history.pinnedBytes
+fun activePinCount(): Int = activeLeases.size
+fun acquirePin(snapshot: DocumentSnapshot, history: History): Outcome<SnapshotLease, ResourceError> {
+val bytes = snapshot.estimatedPinnedBytes().coerceAtLeast(256L)
+val projected = snapshotPinnedBytes + history.pinnedBytes + bytes
+val lease = SnapshotLease(snapshot, bytes) { released ->
 sealed interface Mutation
 data class InsertObject(
 val space: SpaceId,
 val layer: LayerId,
 val id: ObjectId,
 val payload: ObjectPayload,
-val bounds: DocRect
+val bounds: DocRect,
+val transform: AffineTransform2D = AffineTransform2D.IDENTITY,
+val style: ObjectStyle = ObjectStyle(),
+val isLocked: Boolean = false,
+val targetVersion: Long = 1L
 data class RemoveObject(
 val id: ObjectId
 data class UpdatePayload(
 val id: ObjectId,
 val newPayload: ObjectPayload,
-val newBounds: DocRect
+val newBounds: DocRect,
+val targetVersion: Long? = null
 data class MoveObject(
 val id: ObjectId,
 val deltaX: Double,
-val deltaY: Double
+val deltaY: Double,
+val targetVersion: Long? = null
+data class TransformObject(
+val id: ObjectId,
+val newTransform: AffineTransform2D,
+val newBounds: DocRect,
+val targetVersion: Long? = null
+data class UpdateObjectStyle(
+val id: ObjectId,
+val newStyle: ObjectStyle,
+val targetVersion: Long? = null
+data class SetObjectLock(
+val id: ObjectId,
+val isLocked: Boolean,
+val targetVersion: Long? = null
+data class AddLayer(
+val layer: LayerDescriptor,
+val index: Int = -1
+data class RemoveLayer(
+val layerId: LayerId
+data class ReorderLayer(
+val orderedLayerIds: List<LayerId>
+data class SetLayerLock(
+val layerId: LayerId,
+val isLocked: Boolean
+data class SetLayerStyle(
+val layerId: LayerId,
+val opacity: Float,
+val isVisible: Boolean,
+val name: String? = null
+data class AddPage(
+val page: PageDescriptor,
+val index: Int = -1
+data class RemovePage(
+val pageId: PageId
+data class ReorderPage(
+val orderedPageIds: List<PageId>
+data class ResizePage(
+val pageId: PageId,
+val newWidthPt: Double,
+val newHeightPt: Double
 data class Precondition(
 val id: String,
 val expectedVersion: Long
@@ -84,22 +293,198 @@ val preconditions: List<Precondition> = emptyList(),
 val mutations: List<Mutation>,
 val gesture: GestureId,
 val label: UndoLabel
-class ValidatedPlan internal constructor(val plan: EditPlan)
+class ValidatedPlan internal constructor(
+val plan: EditPlan,
 data class ChangeSet(
 val changedIds: Set<ObjectId>,
 val oldBounds: DocRect? = null,
-val newBounds: DocRect? = null
+val newBounds: DocRect? = null,
+val changedPageIds: Set<PageId> = emptySet(),
+val changedLayerIds: Set<LayerId> = emptySet()
 data class AppliedEdit(
 val revision: Revision,
 val changeSet: ChangeSet,
-val inversePlan: EditPlan
+val inversePlan: EditPlan,
+val writeSet: WriteSet
 fun validatePlan(document: DocumentRead, plan: EditPlan, limits: Limits): Outcome<ValidatedPlan, EditError> {
-val state = document.objectState(ObjectId(precondition.id))
-val existing = document.objectState(mutation.id)
-val state = document.objectState(mutation.id)
-val state = document.objectState(mutation.id)
-val state = document.objectState(mutation.id)
-val totalObjects = document.totalObjectCount + pendingInserts
+val objId = ObjectId(precondition.id)
+val actualVer = document.getObjectVersion(objId)
+val hasLayerCatalog = document.layers.isNotEmpty()
+val hasPageCatalog = document.pages.isNotEmpty()
+val stagedPages = ArrayList<PageDescriptor>(document.pages)
+val stagedPageMap = LinkedHashMap<PageId, PageDescriptor>().apply {
+val stagedLayers = ArrayList<LayerDescriptor>(document.layers)
+val stagedLayerMap = LinkedHashMap<LayerId, LayerDescriptor>().apply {
+val stagedObjects = LinkedHashMap<ObjectId, SceneObject?>()
+fun currentResidency(id: ObjectId): ResidencyState {
+fun currentObject(id: ObjectId): SceneObject? {
+val existing = document.getObject(id)
+val payload = document.getObjectPayload(id)
+fun isObjectOrLayerLocked(id: ObjectId, obj: SceneObject, allowObjectUnlock: Boolean = false): Boolean {
+val layerLocked = if (stagedLayerMap.containsKey(obj.layer)) {
+val state = currentResidency(mutation.id)
+val layer = stagedLayerMap[mutation.layer]
+val newObj = SceneObject(
+val obj = currentObject(mutation.id)!!
+val obj = currentObject(mutation.id)!!
+val nextVer = mutation.targetVersion ?: (obj.version + 1L)
+val updated = obj.copy(
+val obj = currentObject(mutation.id)!!
+val nextBounds = try {
+val nextVer = mutation.targetVersion ?: (obj.version + 1L)
+val obj = currentObject(mutation.id)!!
+val nextVer = mutation.targetVersion ?: (obj.version + 1L)
+val obj = currentObject(mutation.id)!!
+val nextVer = mutation.targetVersion ?: (obj.version + 1L)
+val obj = currentObject(mutation.id)!!
+val nextVer = mutation.targetVersion ?: (obj.version + 1L)
+val idx = if (mutation.index in 0..stagedLayers.size) mutation.index else stagedLayers.size
+val existing = stagedLayerMap[mutation.layerId]
+val currentIds = stagedLayers.map { it.id }
+val reordered = mutation.orderedLayerIds.map { stagedLayerMap[it]!! }
+val existing = stagedLayerMap[mutation.layerId]
+val updated = existing.copy(isLocked = mutation.isLocked)
+val idx = stagedLayers.indexOfFirst { it.id == mutation.layerId }
+val existing = stagedLayerMap[mutation.layerId]
+val updated = existing.copy(
+val idx = stagedLayers.indexOfFirst { it.id == mutation.layerId }
+val idx = if (mutation.index in 0..stagedPages.size) mutation.index else stagedPages.size
+val currentIds = stagedPages.map { it.id }
+val reordered = mutation.orderedPageIds.map { stagedPageMap[it]!! }
+val existing = stagedPageMap[mutation.pageId]
+val updated = existing.copy(widthPt = mutation.newWidthPt, heightPt = mutation.newHeightPt)
+val idx = stagedPages.indexOfFirst { it.id == mutation.pageId }
+val totalObjects = document.totalObjectCount + netInsertedObjects
+val touchedGroups = stagedObjects.values.filterNotNull().filter { it.payload is GroupPayload }
+val groupValidation = validateGroups(document, stagedObjects, limits)
+fun resolveObject(id: ObjectId): SceneObject? {
+fun resolveResidency(id: ObjectId): ResidencyState {
+val parentByChild = HashMap<ObjectId, ObjectId>()
+val allGroups = LinkedHashMap<ObjectId, GroupPayload>()
+val queue = ArrayDeque<ObjectId>()
+val existingParent = document.parentGroupOf(id)
+val gId = queue.removeFirst()
+val gObj = resolveObject(gId) ?: continue
+val gPayload = gObj.payload as? GroupPayload ?: continue
+val parentOfG = document.parentGroupOf(gId)
+val memberObj = resolveObject(memberId)
+val existingOwner = parentByChild.put(memberId, gId)
+val docOwner = document.parentGroupOf(memberId)
+val docOwnerObj = resolveObject(docOwner)
+val docOwnerGroup = docOwnerObj?.payload as? GroupPayload
+val visiting = HashSet<ObjectId>()
+val depthMemo = HashMap<ObjectId, Int>()
+fun computeDepth(groupId: ObjectId): Int {
+val payload = allGroups[groupId] ?: (resolveObject(groupId)?.payload as? GroupPayload)
+val memberObj = resolveObject(memberId)
+val childDepth = computeDepth(memberId)
+val totalDepth = 1 + maxChildDepth
+val depth = computeDepth(groupId)
+fun applyPlan(
+val plan = validatedPlan.plan
+val recheck = validatePlan(state, plan, limits)
+val beforeSnapshot = state.snapshot()
+val workingPages = ArrayList(beforeSnapshot.pages)
+val workingPageMap = LinkedHashMap<PageId, PageDescriptor>().apply {
+val workingLayers = ArrayList(beforeSnapshot.layers)
+val workingLayerMap = LinkedHashMap<LayerId, LayerDescriptor>().apply {
+val workingParentGroups = LinkedHashMap<ObjectId, ObjectId>().apply {
+val p = obj.payload
+val touchedObjectIds = LinkedHashSet<ObjectId>()
+val beforeObjects = LinkedHashMap<ObjectId, SceneObject?>()
+val changedPageIds = LinkedHashSet<PageId>()
+val changedLayerIds = LinkedHashSet<LayerId>()
+val stepInverses = ArrayList<Mutation>(plan.mutations.size)
+fun recordBeforeObject(id: ObjectId) {
+val newObj = SceneObject(
+val prev = workingDir.getObject(mutation.id)!!
+val prev = workingDir.getObject(mutation.id)!!
+val nextVer = mutation.targetVersion ?: (prev.version + 1L)
+val nextObj = prev.copy(
+val prev = workingDir.getObject(mutation.id)!!
+val nextVer = mutation.targetVersion ?: (prev.version + 1L)
+val nextObj = prev.copy(
+val prev = workingDir.getObject(mutation.id)!!
+val nextVer = mutation.targetVersion ?: (prev.version + 1L)
+val nextObj = prev.copy(
+val prev = workingDir.getObject(mutation.id)!!
+val nextVer = mutation.targetVersion ?: (prev.version + 1L)
+val nextObj = prev.copy(
+val prev = workingDir.getObject(mutation.id)!!
+val nextVer = mutation.targetVersion ?: (prev.version + 1L)
+val nextObj = prev.copy(
+val idx = if (mutation.index in 0..workingLayers.size) mutation.index else workingLayers.size
+val idx = workingLayers.indexOfFirst { it.id == mutation.layerId }
+val prev = workingLayerMap.remove(mutation.layerId)!!
+val prevOrder = workingLayers.map { it.id }
+val reordered = mutation.orderedLayerIds.map { workingLayerMap[it]!! }
+val prev = workingLayerMap[mutation.layerId]!!
+val next = prev.copy(isLocked = mutation.isLocked)
+val idx = workingLayers.indexOfFirst { it.id == mutation.layerId }
+val prev = workingLayerMap[mutation.layerId]!!
+val next = prev.copy(
+val idx = workingLayers.indexOfFirst { it.id == mutation.layerId }
+val idx = if (mutation.index in 0..workingPages.size) mutation.index else workingPages.size
+val idx = workingPages.indexOfFirst { it.id == mutation.pageId }
+val prev = workingPageMap.remove(mutation.pageId)!!
+val prevOrder = workingPages.map { it.id }
+val reordered = mutation.orderedPageIds.map { workingPageMap[it]!! }
+val prev = workingPageMap[mutation.pageId]!!
+val next = prev.copy(widthPt = mutation.newWidthPt, heightPt = mutation.newHeightPt)
+val idx = workingPages.indexOfFirst { it.id == mutation.pageId }
+val changedIds = LinkedHashSet<ObjectId>()
+val writeRecords = ArrayList<WriteRecord>()
+val referencedAssets = LinkedHashSet<AssetId>()
+val beforeObj = beforeObjects[id]
+val afterObj = workingDir.getObject(id)
+val p = afterObj.payload
+val op = if (beforeObj == null) "insert" else "update"
+val afterPage = workingPageMap[pageId]
+val digest = if (afterPage != null) {
+val afterLayer = workingLayerMap[layerId]
+val digest = if (afterLayer != null) {
+val nextRevision = beforeSnapshot.version.revision.next()
+val nextDocVersion = DocVersion(beforeSnapshot.version.document, nextRevision)
+val inverseMutations = stepInverses.asReversed()
+val inversePlan = EditPlan(
+val changeSet = ChangeSet(
+val writeSet = WriteSet(
+fun replayWriteSet(
+val beforeSnap = state.snapshot()
+val validated = validatePlan(state, writeSet.plan, limits)
+val appliedOutcome = applyPlan(state, validated.getOrNull()!!, limits)
+val applied = appliedOutcome.getOrNull()!!
+val actualRec = applied.writeSet.records.find {
+val pageMap = LinkedHashMap<PageId, PageDescriptor>().apply {
+val layerMap = LinkedHashMap<LayerId, LayerDescriptor>().apply {
+val parentGroups = LinkedHashMap<ObjectId, ObjectId>().apply {
+class History(
+val maxEntries: Int = 100,
+val maxPinnedBytes: Long = 16_000_000L
+val gesture: GestureId,
+val label: UndoLabel,
+val forwardMutations: List<Mutation>,
+val inverseMutations: List<Mutation>,
+val estimatedBytes: Long
+val undoCount: Int get() = undoStack.size
+val redoCount: Int get() = redoStack.size
+val canUndo: Boolean get() = undoStack.isNotEmpty()
+val canRedo: Boolean get() = redoStack.isNotEmpty()
+val pinnedBytes: Long get() = currentPinnedBytes
+fun record(plan: EditPlan, applied: AppliedEdit) {
+val removed = redoStack.removeLast()
+val entryBytes = estimateMutationsBytes(plan.mutations) + estimateMutationsBytes(applied.inversePlan.mutations)
+val top = undoStack.lastOrNull()
+val combinedForward = top.forwardMutations + plan.mutations
+val combinedInverse = applied.inversePlan.mutations + top.inverseMutations
+val combinedBytes = estimateMutationsBytes(combinedForward) + estimateMutationsBytes(combinedInverse)
+val merged = HistoryEntry(
+val entry = HistoryEntry(
+fun undo(currentVersion: DocVersion): EditPlan? {
+val entry = undoStack.removeLastOrNull() ?: return null
+fun redo(currentVersion: DocVersion): EditPlan? {
+val entry = redoStack.removeLastOrNull() ?: return null
+val evicted = undoStack.removeFirst()
 sealed interface Outcome<out T, out E> {
 val isSuccess: Boolean
 val isFailure: Boolean
@@ -225,6 +610,14 @@ fun objectState(id: ObjectId): ResidencyState
 fun isLocked(id: ObjectId): Boolean
 fun getObjectPayload(id: ObjectId): ObjectPayload?
 fun queryBounds(rect: DocRect): List<ObjectId>
+fun getObject(id: ObjectId): SceneObject? = null
+fun getObjectVersion(id: ObjectId): Long? = getObject(id)?.version
+fun isLayerLocked(layerId: LayerId): Boolean = getLayer(layerId)?.isLocked ?: false
+fun getPage(pageId: PageId): PageDescriptor? = null
+fun getLayer(layerId: LayerId): LayerDescriptor? = null
+fun parentGroupOf(id: ObjectId): ObjectId? = null
+val pages: List<PageDescriptor> get() = emptyList()
+val layers: List<LayerDescriptor> get() = emptyList()
 data class DocPoint(val x: Double, val y: Double) {
 data class DocRect(
 val left: Double,
@@ -235,6 +628,8 @@ val width: Double get() = right - left
 val height: Double get() = bottom - top
 fun contains(point: DocPoint): Boolean {
 fun intersects(other: DocRect): Boolean {
+fun union(other: DocRect): DocRect {
+fun translate(dx: Double, dy: Double): DocRect {
 value class ViewPx(val value: Float) {
 value class DocUnits(val points: Double) {
 data class ViewPoint(val x: Double, val y: Double) {

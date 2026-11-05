@@ -1,7 +1,12 @@
 package inkspace.core.read
 
+import inkspace.core.id.LayerId
 import inkspace.core.id.ObjectId
+import inkspace.core.id.PageId
 import inkspace.core.model.DocVersion
+import inkspace.core.model.LayerDescriptor
+import inkspace.core.model.PageDescriptor
+import inkspace.core.model.SceneObject
 import inkspace.core.payload.ObjectPayload
 import inkspace.core.unit.DocRect
 
@@ -18,4 +23,13 @@ interface DocumentRead {
     fun isLocked(id: ObjectId): Boolean
     fun getObjectPayload(id: ObjectId): ObjectPayload?
     fun queryBounds(rect: DocRect): List<ObjectId>
+
+    fun getObject(id: ObjectId): SceneObject? = null
+    fun getObjectVersion(id: ObjectId): Long? = getObject(id)?.version
+    fun isLayerLocked(layerId: LayerId): Boolean = getLayer(layerId)?.isLocked ?: false
+    fun getPage(pageId: PageId): PageDescriptor? = null
+    fun getLayer(layerId: LayerId): LayerDescriptor? = null
+    fun parentGroupOf(id: ObjectId): ObjectId? = null
+    val pages: List<PageDescriptor> get() = emptyList()
+    val layers: List<LayerDescriptor> get() = emptyList()
 }
