@@ -241,11 +241,11 @@ W4 — stress, не обещание 60 FPS при 10000 одновременн�
 
 **API:** `ObjectPlanner.plan(read: DocumentRead, action: ObjectAction, ctx: PlanContext): Outcome<EditPlan, FeatureError>`; SelectionQuery/SelectionSet; GeometryPort инъектирует runtime, прямой зависимости на ink нет.
 
-- [ ] F07.1 Tests `lasso_contains_intersects`, `add_subtract_selection`, `hidden_locked`, `transform_inverse`, `nested_group_once`, `z_order`, `segment_interpolation` до реализации. Mixed selection не объединяет разные Textbox в новый текст.
-- [ ] F07.2 Spatial bounds query → precise hit test; full/partial freehand/rectangle selection, layer/type filters. Заблокированные/скрытые entities обрабатываются по policy core, не по UI check.
-- [ ] F07.3 Реализовать move/rotate/scale/flip/style/delete/duplicate/z-order и nested groups с depth≤32/cycle reject; preview не мутирует document на каждый MOVE. Commit — одна logical operation.
-- [ ] F07.4 Реализовать Precision/Segment/Stroke/Object eraser. Segment интерполирует coordinates/pressure/time и сохраняет остатки, обычные stroke modes не стирают images/PDF/text; Object mode отдельно и явно. Filters/active vs visible unlocked layers применяются до clipping.
-- [ ] F07.5 Реализовать in-document copy/cut/paste с remap stable IDs/attachments/links; cross-doc execution использует TransferId F16. Добавить undo property tests для partial erase и nested transforms.
+- [x] F07.1 Tests `lasso_contains_intersects`, `add_subtract_selection`, `hidden_locked`, `transform_inverse`, `nested_group_once`, `z_order`, `segment_interpolation` до реализации. Mixed selection не объединяет разные Textbox в новый текст.
+- [x] F07.2 Spatial bounds query → precise hit test; full/partial freehand/rectangle selection, layer/type filters. Заблокированные/скрытые entities обрабатываются по policy core, не по UI check.
+- [x] F07.3 Реализовать move/rotate/scale/flip/style/delete/duplicate/z-order и nested groups с depth≤32/cycle reject; preview не мутирует document на каждый MOVE. Commit — одна logical operation.
+- [x] F07.4 Реализовать Precision/Segment/Stroke/Object eraser. Segment интерполирует coordinates/pressure/time и сохраняет остатки, обычные stroke modes не стирают images/PDF/text; Object mode отдельно и явно. Filters/active vs visible unlocked layers применяются до clipping.
+- [x] F07.5 Реализовать in-document copy/cut/paste с remap stable IDs/attachments/links; cross-doc execution использует TransferId F16. Добавить undo property tests для partial erase и nested transforms.
 
 **Gate:** objects/core integration PASS; 10000 generated edits undo/redo; W2 spatial gate ≤8ms для заданного candidate count; changing locked layer через любой intent отвергается атомарно. Сохранённый стёртый/преобразованный штрих восстанавливается без растеризации.
 

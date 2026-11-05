@@ -129,8 +129,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f07",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-objects/src/test/kotlin/inkspace/objects/F07ObjectsContractAndEraserTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F07/report.md"
     },
     {
@@ -145,8 +145,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f07",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-objects/src/test/kotlin/inkspace/objects/F07PropertyAndSpatialBenchmarkTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F07/report.md"
     },
     {
@@ -160,8 +160,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f07",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-objects/src/test/kotlin/inkspace/objects/F07ObjectsContractAndEraserTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F07/report.md"
     },
     {
@@ -993,8 +993,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f07",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F07RuntimeObjectsIntegrationTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F07/report.md"
     },
     {
@@ -1010,8 +1010,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f07",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F07RuntimeObjectsIntegrationTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F07/report.md"
     },
     {
@@ -1027,8 +1027,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f07",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F07RuntimeObjectsIntegrationTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F07/report.md"
     },
     {
@@ -1043,8 +1043,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f07",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F07RuntimeObjectsIntegrationTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F07/report.md"
     },
     {

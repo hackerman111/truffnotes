@@ -93,3 +93,18 @@ sealed interface InputError : CoreError {
     data class MemoryWindowExceeded(val requestedBytes: Long, val maxWindowBytes: Long) : InputError
     data class SessionNotActive(val session: String, val reason: String) : InputError
 }
+
+sealed interface FeatureError : CoreError {
+    data class EmptySelection(val reason: String) : FeatureError
+    data class EntityNotFound(val id: String) : FeatureError
+    data class ObjectsNotResident(val ids: List<String>) : FeatureError
+    data class LockedTarget(val id: String, val reason: String) : FeatureError
+    data class HiddenTarget(val id: String, val reason: String) : FeatureError
+    data class InvalidGroupOperation(val reason: String) : FeatureError
+    data class MaxGroupDepthExceeded(val current: Int, val max: Int) : FeatureError
+    data class GroupCycleDetected(val groupId: String) : FeatureError
+    data class InvalidParameters(val reason: String) : FeatureError
+    data class GeometryFailure(val strokeId: String, val reason: String) : FeatureError
+    data class NoOpAction(val reason: String) : FeatureError
+}
+

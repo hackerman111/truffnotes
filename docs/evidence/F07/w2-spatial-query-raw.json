@@ -1,0 +1,21 @@
+{
+  "phase_id": "F07",
+  "seed": 20261105,
+  "workload": "W2 (500 pages, 100000 strokes x 64 samples, 1000 candidates in query region)",
+  "total_objects": 100000,
+  "candidates_in_query": 1000,
+  "measured_runs": 30,
+  "generated_undo_redo_edits_verified": 10000,
+  "metrics": {
+    "w2_freehand_lasso_1000_candidates_ms": {
+      "budget_p95_ms": 8.0,
+      "p50_ms": 4.7849,
+      "p95_ms": 5.4094
+    },
+    "w2_segment_eraser_1000_candidates_ms": {
+      "budget_p95_ms": 8.0,
+      "p50_ms": 4.8621,
+      "p95_ms": 5.3168
+    }
+  }
+}

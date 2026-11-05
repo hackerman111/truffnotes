@@ -93,6 +93,18 @@ data class LockedTarget(val layerId: String, val reason: String) : InputError
 data class SpoolFailed(val strokeId: String, val reason: String) : InputError
 data class MemoryWindowExceeded(val requestedBytes: Long, val maxWindowBytes: Long) : InputError
 data class SessionNotActive(val session: String, val reason: String) : InputError
+sealed interface FeatureError : CoreError {
+data class EmptySelection(val reason: String) : FeatureError
+data class EntityNotFound(val id: String) : FeatureError
+data class ObjectsNotResident(val ids: List<String>) : FeatureError
+data class LockedTarget(val id: String, val reason: String) : FeatureError
+data class HiddenTarget(val id: String, val reason: String) : FeatureError
+data class InvalidGroupOperation(val reason: String) : FeatureError
+data class MaxGroupDepthExceeded(val current: Int, val max: Int) : FeatureError
+data class GroupCycleDetected(val groupId: String) : FeatureError
+data class InvalidParameters(val reason: String) : FeatureError
+data class GeometryFailure(val strokeId: String, val reason: String) : FeatureError
+data class NoOpAction(val reason: String) : FeatureError
 value class DocumentId(val value: String) {
 value class SpaceId(val value: String) {
 value class PageId(val value: String) {
@@ -280,7 +292,34 @@ val m10: Double = 0.0,
 val m11: Double = 1.0,
 val m12: Double = 0.0
 fun translate(dx: Double, dy: Double): AffineTransform2D {
+fun multiply(other: AffineTransform2D): AffineTransform2D {
+fun transformPoint(point: DocPoint): DocPoint {
+fun transformRect(rect: DocRect): DocRect {
+val c0 = transformPoint(DocPoint(rect.left, rect.top))
+val c1 = transformPoint(DocPoint(rect.right, rect.top))
+val c2 = transformPoint(DocPoint(rect.right, rect.bottom))
+val c3 = transformPoint(DocPoint(rect.left, rect.bottom))
+val minX = min(min(c0.x, c1.x), min(c2.x, c3.x))
+val maxX = max(max(c0.x, c1.x), max(c2.x, c3.x))
+val minY = min(min(c0.y, c1.y), min(c2.y, c3.y))
+val maxY = max(max(c0.y, c1.y), max(c2.y, c3.y))
+fun invert(): AffineTransform2D? {
+val det = m00 * m11 - m01 * m10
+val invDet = 1.0 / det
+val i00 = m11 * invDet
+val i01 = -m01 * invDet
+val i02 = (m01 * m12 - m11 * m02) * invDet
+val i10 = -m10 * invDet
+val i11 = m00 * invDet
+val i12 = (m10 * m02 - m00 * m12) * invDet
 val IDENTITY = AffineTransform2D()
+fun translation(dx: Double, dy: Double): AffineTransform2D {
+fun scaleAround(scaleX: Double, scaleY: Double, pivot: DocPoint): AffineTransform2D {
+fun rotateAround(angleRadians: Double, pivot: DocPoint): AffineTransform2D {
+val c = cos(angleRadians)
+val s = sin(angleRadians)
+fun flipHorizontalAround(pivotX: Double): AffineTransform2D {
+fun flipVerticalAround(pivotY: Double): AffineTransform2D {
 data class ObjectStyle(
 val opacity: Float = 1.0f,
 val isVisible: Boolean = true,
@@ -683,6 +722,136 @@ val entry = undoStack.removeLastOrNull() ?: return null
 fun redo(currentVersion: DocVersion): EditPlan? {
 val entry = redoStack.removeLastOrNull() ?: return null
 val evicted = undoStack.removeFirst()
+enum class SelectionMode {
+enum class SelectionRule {
+enum class SelectionCombinator {
+enum class ObjectKindFilter {
+val ALL: Set<ObjectKindFilter> = java.util.Set.copyOf(entries)
+fun fromPayload(payload: ObjectPayload): ObjectKindFilter {
+data class SelectionFilter(
+val activeLayerOnly: Boolean = false,
+val activeLayerId: LayerId? = null,
+val allowedKinds: Set<ObjectKindFilter> = ObjectKindFilter.ALL
+val frozenAllowedKinds: Set<ObjectKindFilter> = java.util.Set.copyOf(allowedKinds)
+data class SelectionQuery(
+val spaceId: SpaceId = SpaceId("space-1"),
+val mode: SelectionMode = SelectionMode.RECTANGLE,
+val rule: SelectionRule = SelectionRule.INTERSECTS,
+val combinator: SelectionCombinator = SelectionCombinator.REPLACE,
+val rect: DocRect? = null,
+val polygonPoints: List<DocPoint> = emptyList(),
+val filter: SelectionFilter = SelectionFilter(),
+val enteredGroupId: ObjectId? = null
+val frozenPolygonPoints: List<DocPoint> = java.util.List.copyOf(polygonPoints)
+data class SelectionSet(
+val selectedIds: Set<ObjectId> = emptySet(),
+val enteredGroupId: ObjectId? = null,
+val bounds: DocRect? = null
+val frozenSelectedIds: Set<ObjectId> = java.util.Set.copyOf(selectedIds)
+val isEmpty: Boolean get() = frozenSelectedIds.isEmpty()
+val size: Int get() = frozenSelectedIds.size
+enum class FlipAxis {
+enum class ZOrderCommand {
+data class StylePatch(
+val colorArgb: Int? = null,
+val strokeWidthPt: Double? = null,
+val opacity: Float? = null
+enum class EraserMode {
+enum class EraserShape {
+enum class EraserLayerPolicy {
+data class EraserSpec(
+val mode: EraserMode = EraserMode.SEGMENT,
+val shape: EraserShape = EraserShape.CIRCLE,
+val radiusPt: Double = 6.0,
+val layerPolicy: EraserLayerPolicy = EraserLayerPolicy.VISIBLE_UNLOCKED_LAYERS,
+val allowedObjectKinds: Set<ObjectKindFilter> = ObjectKindFilter.ALL
+val frozenAllowedKinds: Set<ObjectKindFilter> = java.util.Set.copyOf(allowedObjectKinds)
+value class TransferId(val value: String) {
+data class ClipboardObjectEntry(
+val originalId: ObjectId,
+val objectSnapshot: SceneObject,
+val parentGroupId: ObjectId? = null
+val frozenObject: SceneObject = objectSnapshot.frozen()
+data class ClipboardBundle(
+val transferId: TransferId,
+val sourceDocument: DocumentId,
+val sourceSpace: SpaceId,
+val sourceBounds: DocRect,
+val entries: List<ClipboardObjectEntry>
+val frozenEntries: List<ClipboardObjectEntry> = java.util.List.copyOf(entries)
+data class PreviewTransformOverlay(
+val targetIds: Set<ObjectId>,
+val deltaTransform: AffineTransform2D,
+val previewBounds: DocRect
+val frozenTargetIds: Set<ObjectId> = java.util.Set.copyOf(targetIds)
+data class PlanContext(
+val activeSpaceId: SpaceId = SpaceId("space-1"),
+val activePageId: PageId = PageId("page-1"),
+val activeLayerId: LayerId = LayerId("layer-1"),
+val enteredGroupId: ObjectId? = null,
+val gestureId: GestureId = GestureId("gesture-obj-1"),
+val geometryPort: GeometryPort? = null,
+val limits: Limits = Limits()
+sealed interface ObjectAction {
+data class Move(
+val targets: Set<ObjectId>,
+val deltaX: Double,
+val deltaY: Double
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class Scale(
+val targets: Set<ObjectId>,
+val scaleX: Double,
+val scaleY: Double,
+val pivot: DocPoint? = null
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class Rotate(
+val targets: Set<ObjectId>,
+val angleRadians: Double,
+val pivot: DocPoint? = null
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class Flip(
+val targets: Set<ObjectId>,
+val axis: FlipAxis,
+val pivot: DocPoint? = null
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class ApplyStyle(
+val targets: Set<ObjectId>,
+val patch: StylePatch
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class Delete(
+val targets: Set<ObjectId>
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class Duplicate(
+val targets: Set<ObjectId>,
+val offsetX: Double = 12.0,
+val offsetY: Double = 12.0,
+val idPrefix: String = "dup"
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class ChangeZOrder(
+val targets: Set<ObjectId>,
+val command: ZOrderCommand
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class MoveToLayer(
+val targets: Set<ObjectId>,
+val targetLayerId: LayerId
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class Group(
+val targets: Set<ObjectId>,
+val newGroupId: ObjectId
+val frozenTargets: Set<ObjectId> = java.util.Set.copyOf(targets)
+data class Ungroup(
+val groupIds: Set<ObjectId>
+val frozenGroupIds: Set<ObjectId> = java.util.Set.copyOf(groupIds)
+data class Erase(
+val pathPoints: List<DocPoint>,
+val spec: EraserSpec = EraserSpec(),
+val splitIdPrefix: String = "erased"
+val frozenPathPoints: List<DocPoint> = java.util.List.copyOf(pathPoints)
+data class Paste(
+val bundle: ClipboardBundle,
+val targetCenter: DocPoint? = null,
+val targetLayerId: LayerId? = null,
+val idPrefix: String = "paste"
 sealed interface Outcome<out T, out E> {
 val isSuccess: Boolean
 val isFailure: Boolean

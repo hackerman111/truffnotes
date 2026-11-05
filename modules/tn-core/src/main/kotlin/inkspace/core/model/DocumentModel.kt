@@ -21,8 +21,14 @@ import inkspace.core.payload.StrokePayload
 import inkspace.core.payload.TextPayload
 import inkspace.core.read.DocumentRead
 import inkspace.core.read.ResidencyState
+import inkspace.core.unit.DocPoint
 import inkspace.core.unit.DocRect
 import kotlinx.serialization.Serializable
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sin
 
 @Serializable
 enum class DocumentKind {
@@ -70,8 +76,104 @@ data class AffineTransform2D(
         return copy(m02 = m02 + dx, m12 = m12 + dy)
     }
 
+    /**
+     * Composes `this` after `other` (`(this * other)(p) = this(other(p))`).
+     */
+    fun multiply(other: AffineTransform2D): AffineTransform2D {
+        return AffineTransform2D(
+            m00 = m00 * other.m00 + m01 * other.m10,
+            m01 = m00 * other.m01 + m01 * other.m11,
+            m02 = m00 * other.m02 + m01 * other.m12 + m02,
+            m10 = m10 * other.m00 + m11 * other.m10,
+            m11 = m10 * other.m01 + m11 * other.m11,
+            m12 = m10 * other.m02 + m11 * other.m12 + m12
+        )
+    }
+
+    fun transformPoint(point: DocPoint): DocPoint {
+        return DocPoint(
+            x = m00 * point.x + m01 * point.y + m02,
+            y = m10 * point.x + m11 * point.y + m12
+        )
+    }
+
+    fun transformRect(rect: DocRect): DocRect {
+        val c0 = transformPoint(DocPoint(rect.left, rect.top))
+        val c1 = transformPoint(DocPoint(rect.right, rect.top))
+        val c2 = transformPoint(DocPoint(rect.right, rect.bottom))
+        val c3 = transformPoint(DocPoint(rect.left, rect.bottom))
+        val minX = min(min(c0.x, c1.x), min(c2.x, c3.x))
+        val maxX = max(max(c0.x, c1.x), max(c2.x, c3.x))
+        val minY = min(min(c0.y, c1.y), min(c2.y, c3.y))
+        val maxY = max(max(c0.y, c1.y), max(c2.y, c3.y))
+        return DocRect(minX, minY, maxX, maxY)
+    }
+
+    fun invert(): AffineTransform2D? {
+        val det = m00 * m11 - m01 * m10
+        if (!det.isFinite() || abs(det) < 1e-12) return null
+        val invDet = 1.0 / det
+        val i00 = m11 * invDet
+        val i01 = -m01 * invDet
+        val i02 = (m01 * m12 - m11 * m02) * invDet
+        val i10 = -m10 * invDet
+        val i11 = m00 * invDet
+        val i12 = (m10 * m02 - m00 * m12) * invDet
+        return AffineTransform2D(i00, i01, i02, i10, i11, i12)
+    }
+
     companion object {
         val IDENTITY = AffineTransform2D()
+
+        fun translation(dx: Double, dy: Double): AffineTransform2D {
+            return AffineTransform2D(m02 = dx, m12 = dy)
+        }
+
+        fun scaleAround(scaleX: Double, scaleY: Double, pivot: DocPoint): AffineTransform2D {
+            return AffineTransform2D(
+                m00 = scaleX,
+                m01 = 0.0,
+                m02 = pivot.x * (1.0 - scaleX),
+                m10 = 0.0,
+                m11 = scaleY,
+                m12 = pivot.y * (1.0 - scaleY)
+            )
+        }
+
+        fun rotateAround(angleRadians: Double, pivot: DocPoint): AffineTransform2D {
+            val c = cos(angleRadians)
+            val s = sin(angleRadians)
+            return AffineTransform2D(
+                m00 = c,
+                m01 = -s,
+                m02 = pivot.x - c * pivot.x + s * pivot.y,
+                m10 = s,
+                m11 = c,
+                m12 = pivot.y - s * pivot.x - c * pivot.y
+            )
+        }
+
+        fun flipHorizontalAround(pivotX: Double): AffineTransform2D {
+            return AffineTransform2D(
+                m00 = -1.0,
+                m01 = 0.0,
+                m02 = 2.0 * pivotX,
+                m10 = 0.0,
+                m11 = 1.0,
+                m12 = 0.0
+            )
+        }
+
+        fun flipVerticalAround(pivotY: Double): AffineTransform2D {
+            return AffineTransform2D(
+                m00 = 1.0,
+                m01 = 0.0,
+                m02 = 0.0,
+                m10 = 0.0,
+                m11 = -1.0,
+                m12 = 2.0 * pivotY
+            )
+        }
     }
 }
 
@@ -192,7 +294,9 @@ internal sealed interface DirectoryEntry {
 internal class LeafChunk(
     val entries: Map<ObjectId, DirectoryEntry>,
     val residentBytes: Long
-)
+) {
+    internal val entryArray: Array<DirectoryEntry> = entries.values.toTypedArray()
+}
 
 internal class Level1Branch(
     val leaves: Array<LeafChunk?>
@@ -317,7 +421,7 @@ class ChunkedObjectDirectory internal constructor(
             if (b == null) continue
             for (leaf in b.leaves) {
                 if (leaf == null) continue
-                for (entry in leaf.entries.values) {
+                for (entry in leaf.entryArray) {
                     if (entry.bounds.intersects(rect)) {
                         result.add(entry.id)
                     }
@@ -333,7 +437,7 @@ class ChunkedObjectDirectory internal constructor(
             if (b == null) continue
             for (leaf in b.leaves) {
                 if (leaf == null) continue
-                for (entry in leaf.entries.values) {
+                for (entry in leaf.entryArray) {
                     if (entry is DirectoryEntry.Present) {
                         list.add(entry.obj)
                     }

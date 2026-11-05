@@ -1,0 +1,49 @@
+{
+  "phase": "F07",
+  "title": "Выделение, transforms, группы и ластик (:tn-objects, :tn-core, :tn-runtime)",
+  "seed": 20261105,
+  "requirements_verified": [
+    "R08",
+    "R09",
+    "R10",
+    "acceptance22",
+    "acceptance23",
+    "acceptance24",
+    "acceptance25"
+  ],
+  "requirements_contributed": [
+    "R31"
+  ],
+  "test_suites": [
+    {
+      "suite": "inkspace.objects.F07ObjectsContractAndEraserTest",
+      "cases": [
+        "lasso_contains_intersects",
+        "add_subtract_selection",
+        "hidden_locked",
+        "transform_inverse",
+        "nested_group_once",
+        "z_order",
+        "segment_interpolation",
+        "clipboard_copy_cut_paste_remap"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.objects.F07PropertyAndSpatialBenchmarkTest",
+      "cases": [
+        "ten_thousand_generated_object_and_eraser_edits_round_trip_through_undo_redo_without_drift",
+        "w2_spatial_query_and_segment_eraser_meet_8ms_budget_on_1000_candidates_of_100000_strokes"
+      ],
+      "raw_profile_path": "docs/evidence/F07/w2-spatial-query-raw.json",
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.runtime.F07RuntimeObjectsIntegrationTest",
+      "cases": [
+        "end_to_end_lasso_style_move_group_segment_eraser_clipboard_and_vector_persistence"
+      ],
+      "status": "PASS"
+    }
+  ]
+}

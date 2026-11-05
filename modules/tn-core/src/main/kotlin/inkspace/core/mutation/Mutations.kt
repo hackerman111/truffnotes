@@ -941,10 +941,10 @@ fun applyPlan(
                 )
                 workingDir = workingDir.putEntry(DirectoryEntry.Present(nextObj))
                 stepInverses.add(
-                    MoveObject(
+                    TransformObject(
                         id = prev.id,
-                        deltaX = -mutation.deltaX,
-                        deltaY = -mutation.deltaY,
+                        newTransform = prev.transform,
+                        newBounds = prev.bounds,
                         targetVersion = prev.version
                     )
                 )

@@ -37,6 +37,9 @@ project(":tn-render").projectDir = file("modules/tn-render")
 include(":tn-ink")
 project(":tn-ink").projectDir = file("modules/tn-ink")
 
+include(":tn-objects")
+project(":tn-objects").projectDir = file("modules/tn-objects")
+
 include(":tn-platform")
 project(":tn-platform").projectDir = file("modules/tn-platform")
 

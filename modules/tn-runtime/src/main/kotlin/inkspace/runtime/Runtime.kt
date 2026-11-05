@@ -1,9 +1,11 @@
 package inkspace.runtime
 
 import inkspace.core.codec.WriteSet
+import inkspace.core.error.FeatureError
 import inkspace.core.error.StartError
 import inkspace.core.error.SubmitError
 import inkspace.core.id.DocumentId
+import inkspace.core.id.GestureId
 import inkspace.core.id.LayerId
 import inkspace.core.id.PageId
 import inkspace.core.id.Revision
@@ -21,6 +23,12 @@ import inkspace.core.model.SessionKey
 import inkspace.core.mutation.History
 import inkspace.core.mutation.applyPlan
 import inkspace.core.mutation.validatePlan
+import inkspace.core.objects.ClipboardBundle
+import inkspace.core.objects.ObjectAction
+import inkspace.core.objects.PlanContext
+import inkspace.core.objects.SelectionQuery
+import inkspace.core.objects.SelectionSet
+import inkspace.core.objects.TransferId
 import inkspace.core.outcome.Outcome
 import inkspace.core.ports.DurableAck
 import inkspace.core.ports.GeometryPort
@@ -42,6 +50,8 @@ import inkspace.core.runtime.SaveStatusKind
 import inkspace.core.runtime.ViewportState
 import inkspace.ink.InkEngine
 import inkspace.ink.InkGeometryPort
+import inkspace.objects.ObjectPlanner
+import inkspace.objects.SelectionEngine
 import inkspace.store.DocumentStore
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -83,6 +93,7 @@ class Runtime private constructor(
         var inputPolicy: StylusInputPolicy = StylusInputPolicy()
         val activeDraftStrokes = ConcurrentHashMap<Int, DraftStrokeSceneItem>()
         val activeEphemeralOverlays = ConcurrentHashMap<Int, EphemeralOverlayItem>()
+        var currentSelectionSet: SelectionSet = SelectionSet()
         val inFlightReservations = LinkedHashMap<Long, PersistReservation>()
         val outOfOrderAckedRevisions = HashSet<Long>()
         var closed: Boolean = false
@@ -300,6 +311,99 @@ class Runtime private constructor(
         val reqId = RequestId(requestIdGen.getAndIncrement())
         scheduleEngineStepIfNotPaused()
         return Outcome.Success(reqId)
+    }
+
+    /**
+     * Executes a spatial + precise geometric [SelectionQuery] against the session's current state
+     * on the Engine actor, using [defaultGeometryPort] (`InkGeometryPort`) injected as [GeometryPort].
+     */
+    fun selectObjects(
+        session: SessionKey,
+        query: SelectionQuery
+    ): Outcome<SelectionSet, FeatureError> {
+        return engineExecutor.submit<Outcome<SelectionSet, FeatureError>> {
+            val ctx = activeSessions[session]
+                ?: return@submit Outcome.Failure(FeatureError.EntityNotFound(session.document.value))
+            val out = SelectionEngine.select(
+                read = ctx.state,
+                current = ctx.currentSelectionSet,
+                query = query,
+                geometryPort = defaultGeometryPort
+            )
+            if (out is Outcome.Success) {
+                val sel = out.value
+                ctx.currentSelectionSet = sel
+                ctx.viewport = ctx.viewport.copy(selectedObjectIds = sel.frozenSelectedIds)
+                publishedViewports[session] = ctx.viewport
+                val selBounds = sel.bounds
+                if (selBounds != null && !sel.isEmpty) {
+                    ctx.activeEphemeralOverlays[20_000] = EphemeralOverlayItem.SelectionBounds(selBounds)
+                } else {
+                    ctx.activeEphemeralOverlays.remove(20_000)
+                }
+                queues.emitMainEvent(AppEvent.ViewportChanged(ctx.viewport))
+            }
+            out
+        }.get(5, TimeUnit.SECONDS)
+    }
+
+    /**
+     * Plans an [ObjectAction] via [ObjectPlanner.plan] using [defaultGeometryPort] (`InkGeometryPort`)
+     * and submits the resulting [inkspace.core.mutation.EditPlan] through the unified `SubmitEdit` pipeline.
+     */
+    fun submitObjectAction(
+        session: SessionKey,
+        action: ObjectAction,
+        gestureId: GestureId = GestureId("gesture-obj-${requestIdGen.get()}")
+    ): Outcome<RequestId, FeatureError> {
+        val planOut = engineExecutor.submit<Outcome<inkspace.core.mutation.EditPlan, FeatureError>> {
+            val ctx = activeSessions[session]
+                ?: return@submit Outcome.Failure(FeatureError.EntityNotFound(session.document.value))
+            val pageId = ctx.viewport.activePageId ?: ctx.state.pages.firstOrNull()?.id ?: PageId("page-1")
+            val spaceId = ctx.state.getPage(pageId)?.spaceId ?: SpaceId("space-1")
+            val layerId = ctx.state.layers.firstOrNull { !it.isLocked && it.isVisible }?.id
+                ?: ctx.state.layers.firstOrNull()?.id
+                ?: LayerId("layer-1")
+            val planCtx = PlanContext(
+                activeSpaceId = spaceId,
+                activePageId = pageId,
+                activeLayerId = layerId,
+                enteredGroupId = ctx.currentSelectionSet.enteredGroupId,
+                gestureId = gestureId,
+                geometryPort = defaultGeometryPort,
+                limits = config.limits
+            )
+            ObjectPlanner.plan(ctx.state, action, planCtx)
+        }.get(5, TimeUnit.SECONDS)
+
+        val plan = when (planOut) {
+            is Outcome.Failure -> return planOut
+            is Outcome.Success -> planOut.value
+        }
+        val submitRes = trySend(
+            AppCommand.SubmitEdit(
+                session = session,
+                plan = plan,
+                estimatedBytes = 1024L
+            )
+        )
+        return when (submitRes) {
+            is Outcome.Failure -> Outcome.Failure(FeatureError.InvalidParameters(submitRes.error.toString()))
+            is Outcome.Success -> submitRes
+        }
+    }
+
+    fun copySelectionToClipboard(
+        session: SessionKey,
+        targets: Set<inkspace.core.id.ObjectId>? = null,
+        transferId: TransferId = TransferId("clip-${requestIdGen.getAndIncrement()}")
+    ): Outcome<ClipboardBundle, FeatureError> {
+        return engineExecutor.submit<Outcome<ClipboardBundle, FeatureError>> {
+            val ctx = activeSessions[session]
+                ?: return@submit Outcome.Failure(FeatureError.EntityNotFound(session.document.value))
+            val effectiveTargets = targets ?: ctx.currentSelectionSet.frozenSelectedIds
+            ObjectPlanner.copyToClipboard(ctx.state, effectiveTargets, transferId)
+        }.get(5, TimeUnit.SECONDS)
     }
 
     override fun closeAsync(): Outcome<RequestId, SubmitError> {
