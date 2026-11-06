@@ -39,6 +39,13 @@ dependencies {
     implementation(project(":tn-render"))
     implementation(project(":tn-ink"))
     implementation(project(":tn-objects"))
+    implementation(project(":tn-pages"))
+    implementation(project(":tn-text"))
+    implementation(project(":tn-content"))
+    implementation(project(":tn-library"))
+    implementation(project(":tn-workspace"))
+    implementation(project(":tn-pdf"))
+
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

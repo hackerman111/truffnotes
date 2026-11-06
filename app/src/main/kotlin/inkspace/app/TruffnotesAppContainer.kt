@@ -4,6 +4,7 @@ import android.view.MotionEvent
 import inkspace.core.error.StartError
 import inkspace.core.error.SubmitError
 import inkspace.core.id.DocumentId
+import inkspace.core.model.SessionKey
 import inkspace.core.id.ResizeGeneration
 import inkspace.core.id.Revision
 import inkspace.core.id.SurfaceEpoch
@@ -19,6 +20,9 @@ import inkspace.platform.InputTransport
 import inkspace.platform.SavedSessionBundle
 import inkspace.platform.SurfaceHost
 import inkspace.runtime.Runtime
+import inkspace.runtime.WorkspaceGateway
+import inkspace.core.workspace.NotebookGateway
+import java.io.File
 import inkspace.ui.BaselineSessionController
 
 /**
@@ -29,11 +33,19 @@ class TruffnotesAppContainer private constructor(
     val runtime: Runtime,
     val surfaceHost: SurfaceHost,
     val inputTransport: InputTransport,
-    val controller: BaselineSessionController
+    val controller: BaselineSessionController,
+    val notebooks: NotebookGateway
 ) {
+    fun bindDrawingSurface(surface:android.view.Surface) {
+        controller.uiState.activeSession?.let { runtime.bindDrawingSurface(it,surface) }
+    }
+    fun createTextEditorView(context:android.content.Context,id:String?):android.view.View? =
+        controller.uiState.activeSession?.let { runtime.createTextEditorView(context,it,id) }
+
     fun syncEvents(maxBatch: Int = 64): List<AppEvent> {
         val events = controller.syncEvents(maxBatch)
         surfaceHost.onRuntimeEvents(events)
+        (notebooks as? WorkspaceGateway)?.onRuntimeEvents(events)
         return events
     }
 
@@ -50,10 +62,18 @@ class TruffnotesAppContainer private constructor(
         return controller.openDocument(targetDocId, initialViewport = initialViewport)
     }
 
+    private var surfaceSession: SessionKey? = null
+    private val surfaceEpochs = mutableMapOf<SessionKey, SurfaceEpoch>()
+
     fun onSurfaceAttached(widthPx: Int, heightPx: Int): Outcome<SurfaceEpoch, SubmitError> {
         val session = controller.uiState.activeSession
             ?: return Outcome.Failure(SubmitError.StaleSession("none", "No active session"))
-        return surfaceHost.onSurfaceCreated(session, widthPx, heightPx)
+        val attached = surfaceHost.onSurfaceCreated(session, widthPx, heightPx)
+        if (attached is Outcome.Success) {
+            surfaceSession = session
+            surfaceEpochs[session] = attached.value
+        }
+        return attached
     }
 
     fun onSurfaceChanged(widthPx: Int, heightPx: Int): Outcome<ResizeGeneration, SubmitError> {
@@ -62,11 +82,18 @@ class TruffnotesAppContainer private constructor(
         return surfaceHost.onSurfaceChanged(session, widthPx, heightPx)
     }
 
-    fun onSurfaceDestroyed(): SurfaceEpoch? {
-        val session = controller.uiState.activeSession ?: return null
+    fun onSurfaceDestroyed(session: SessionKey? = surfaceSession): SurfaceEpoch? {
+        if (session == null) return null
+        val ownedEpoch = surfaceEpochs.remove(session) ?: return null
+        runtime.unbindDrawingSurface(session)
+        if (session != surfaceSession) {
+            runtime.trySend(AppCommand.DetachSurface(session, ownedEpoch))
+            return ownedEpoch
+        }
         if (!surfaceHost.isSurfaceActive()) return null
         val closingEpoch = surfaceHost.currentSurfaceEpoch()
         surfaceHost.onSurfaceDestroyed(session)
+        surfaceSession = null
         return closingEpoch
     }
 
@@ -154,7 +181,10 @@ class TruffnotesAppContainer private constructor(
         }
     }
 
-    fun closeAsync(): Outcome<RequestId, SubmitError> = runtime.closeAsync()
+    fun closeAsync(): Outcome<RequestId, SubmitError> {
+        notebooks.close()
+        return runtime.closeAsync()
+    }
 
     companion object {
         fun create(
@@ -165,12 +195,16 @@ class TruffnotesAppContainer private constructor(
                 is Outcome.Failure -> started
                 is Outcome.Success -> {
                     val rt = started.value
+                    val controller = BaselineSessionController(rt)
                     Outcome.Success(
                         TruffnotesAppContainer(
                             runtime = rt,
                             surfaceHost = SurfaceHost(rt),
                             inputTransport = InputTransport(poolSize = 64, maxSamplesPerBatch = 512),
-                            controller = BaselineSessionController(rt)
+                            controller = controller,
+                            notebooks = WorkspaceGateway(File(config.storageRootPath, "library.json"), rt,
+                                featureDispatch=rt::performNotebookAction,featureState=rt::notebookState,
+                                thumbnailProvider=rt::notebookThumbnail,copyNotebook=rt::copyNotebook) { controller.uiState.activeSession }
                         )
                     )
                 }

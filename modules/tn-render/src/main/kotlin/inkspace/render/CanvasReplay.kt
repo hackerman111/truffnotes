@@ -13,6 +13,14 @@ import inkspace.core.payload.TapePayload
 import inkspace.core.payload.TextPayload
 import inkspace.core.ports.GeometryPort
 import inkspace.core.ports.TextPort
+import inkspace.core.payload.ImagePayload
+import inkspace.core.payload.PdfObjectPayload
+import inkspace.core.ports.ResourcePort
+import inkspace.core.ports.ResourceRequest
+import inkspace.core.model.SceneObject
+import inkspace.core.unit.DocRect
+import inkspace.core.unit.DocPoint
+import inkspace.core.model.AffineTransform2D
 import inkspace.core.render.TileArtifact
 import inkspace.core.unit.CameraTransform
 import java.util.Locale
@@ -219,6 +227,29 @@ class SoftwareArgbSurface(
         }
     }
 
+    fun drawRaster(width: Int, height: Int, localRect: DocRect, transform: AffineTransform2D,
+                   camera: CameraTransform, opacity: Float, pixelAt: (Int, Int) -> Int,
+                   mask: ((Double, Double) -> Boolean)? = null) {
+        if (localRect.width <= 0 || localRect.height <= 0) return
+        val inverse = transform.invert() ?: return
+        val projected = CameraRelativeProjector.projectWorldRectToView(transform.transformRect(localRect), camera)
+        val left = floor(projected.left).toInt().coerceIn(clipLeft, clipRight)
+        val top = floor(projected.top).toInt().coerceIn(clipTop, clipBottom)
+        val right = ceil(projected.right).toInt().coerceIn(clipLeft, clipRight)
+        val bottom = ceil(projected.bottom).toInt().coerceIn(clipTop, clipBottom)
+        for (y in top until bottom) for (x in left until right) {
+            val worldX = (x + 0.5 - camera.translateX) / camera.scale
+            val worldY = (y + 0.5 - camera.translateY) / camera.scale
+            val localX = inverse.m00 * worldX + inverse.m01 * worldY + inverse.m02
+            val localY = inverse.m10 * worldX + inverse.m11 * worldY + inverse.m12
+            val u = (localX - localRect.left) / localRect.width
+            val v = (localY - localRect.top) / localRect.height
+            if (u < 0 || v < 0 || u >= 1 || v >= 1 || mask?.invoke(u, v) == false) continue
+            val color = modulateAlpha(pixelAt((u * width).toInt().coerceIn(0,width-1), (v * height).toInt().coerceIn(0,height-1)), opacity)
+            pixels[y * widthPx + x] = blendSrcOver(pixels[y * widthPx + x], color)
+        }
+    }
+
     fun drawTile(tile: TileArtifact, destRect: ViewFloatRect) {
         val x0 = max(clipLeft, floor(destRect.left).toInt())
         val y0 = max(clipTop, floor(destRect.top).toInt())
@@ -406,7 +437,8 @@ class CanvasReplay {
         geometryPort: GeometryPort,
         textPort: TextPort,
         androidCanvas: Canvas? = null,
-        pdfVectorCommandsOut: StringBuilder? = null
+        pdfVectorCommandsOut: StringBuilder? = null,
+        resourcePort: ResourcePort? = null
     ): Outcome<Pair<ReplayCounters, IntArray?>, RenderError> {
         val counters = ReplayCounters()
         val softwareSurface = if (computePixels) {
@@ -418,6 +450,42 @@ class CanvasReplay {
         }
 
         androidCanvas?.drawColor(prepared.scene.backgroundColorArgb)
+        for (page in prepared.visiblePages) {
+            val bounds = CameraRelativeProjector.projectWorldRectToView(page.worldBounds,camera)
+            softwareSurface?.drawFilledRect(bounds,page.descriptor.metadata.backgroundColor)
+            softwareSurface?.setClipRect(bounds)
+            val grid=page.descriptor.metadata.template?.grid
+            if(grid!=null && grid.kind!=inkspace.core.pages.PaperGrid.BLANK && grid.spacingPt*camera.scale>=4) {
+                val spacing=(grid.spacingPt*camera.scale).toFloat()
+                val firstX=max(bounds.left,0f); val firstY=max(bounds.top,0f)
+                val lastX=min(bounds.right,targetWidthPx.toFloat()); val lastY=min(bounds.bottom,targetHeightPx.toFloat())
+                val startX=bounds.left+floor((firstX-bounds.left)/spacing)*spacing
+                val startY=bounds.top+floor((firstY-bounds.top)/spacing)*spacing
+                var y=startY
+                var rows=0
+                while(y<=lastY && rows++<5000) {
+                    if(grid.kind==inkspace.core.pages.PaperGrid.DOT) {
+                        var x=startX;var columns=0
+                        while(x<=lastX && columns++<5000) { softwareSurface?.drawFilledCircle(x,y,0.7f,grid.color);x+=spacing }
+                    } else softwareSurface?.drawPolyline(floatArrayOf(firstX,lastX),floatArrayOf(y,y),2,grid.color,0.6f,false)
+                    y+=spacing
+                }
+                if(grid.kind in setOf(inkspace.core.pages.PaperGrid.SQUARE,inkspace.core.pages.PaperGrid.MILLIMETER)) {
+                    var x=startX;var columns=0
+                    while(x<=lastX && columns++<5000) { softwareSurface?.drawPolyline(floatArrayOf(x,x),floatArrayOf(firstY,lastY),2,grid.color,0.6f,false);x+=spacing }
+                }
+                if(grid.kind==inkspace.core.pages.PaperGrid.ISOMETRIC) {
+                    val height=lastY-firstY
+                    var x=startX-height*0.57735f;var columns=0
+                    while(x<=lastX+height && columns++<5000) {
+                        softwareSurface?.drawPolyline(floatArrayOf(x,x+height*0.57735f),floatArrayOf(firstY,lastY),2,grid.color,0.6f,false)
+                        softwareSurface?.drawPolyline(floatArrayOf(x,x-height*0.57735f),floatArrayOf(firstY,lastY),2,grid.color,0.6f,false)
+                        x+=spacing
+                    }
+                }
+            }
+            softwareSurface?.setClipRect(null)
+        }
 
         val clipViewRect = prepared.pageClipUnionWorld?.let {
             CameraRelativeProjector.projectWorldRectToView(it, camera)
@@ -429,7 +497,7 @@ class CanvasReplay {
         }
 
         // 1. Replay visible raster/PDF tiles
-        for (tile in prepared.visibleTiles) {
+        for (tile in prepared.visibleTiles.filterNot { it.tileKey.startsWith("pdf-object:") }) {
             val admitted = tileCache.getOrAdmit(tile) { counters.tileHits += 1 }
             val cachedTile = when (admitted) {
                 is Outcome.Failure -> return admitted
@@ -503,37 +571,53 @@ class CanvasReplay {
                                 viewRect.height
                             )
                         )
+                        payload.label?.let { label ->
+                            val result = drawText(obj,label,effectiveOpacity,prepared,camera,softwareSurface,androidCanvas,derivedCache,textPort,counters)
+                            if (result is Outcome.Failure) return result
+                        }
                         counters.drawnShapes += 1
                     }
                     is TextPayload -> {
-                        val txtOutcome = derivedCache.getOrPutTextLayout(
-                            objectId = obj.id,
-                            contentVersion = obj.version,
-                            payloadDigest = obj.payloadDigest,
-                            payload = payload,
-                            maxWidthPt = obj.bounds.width.coerceAtLeast(10.0),
-                            textPort = textPort,
-                            onHit = { counters.textHits += 1 },
-                            onRebuild = { counters.textRebuilds += 1 }
-                        )
-                        if (txtOutcome is Outcome.Failure) return txtOutcome
-                        val viewRect = CameraRelativeProjector.projectWorldRectToView(obj.bounds, camera)
-                        val colorMod = SoftwareArgbSurface.modulateAlpha(payload.fontColor, effectiveOpacity)
-                        softwareSurface?.drawFilledRect(
-                            ViewFloatRect(
-                                viewRect.left,
-                                viewRect.top,
-                                viewRect.right,
-                                min(viewRect.bottom, viewRect.top + (payload.fontSizePt * camera.scale).toFloat())
-                            ),
-                            colorMod
-                        )
-                        counters.drawnTexts += 1
+                        val result = drawText(obj, payload, effectiveOpacity, prepared, camera, softwareSurface,
+                            androidCanvas, derivedCache, textPort, counters)
+                        if (result is Outcome.Failure) return result
+                    }
+                    is PdfObjectPayload -> {
+                        val prefix="pdf-object:${obj.id.value}:"
+                        for(tile in prepared.visibleTiles.filter { it.tileKey.startsWith(prefix) }) {
+                            softwareSurface?.drawRaster(tile.widthPx,tile.heightPx,tile.docBounds,AffineTransform2D.IDENTITY,camera,effectiveOpacity,tile::pixelAt)
+                            counters.drawnTiles++
+                        }
+                    }
+                    is ImagePayload -> {
+                        val request = ResourceRequest(payload.asset, 32L * 1024 * 1024,
+                            targetWidthPx = (obj.bounds.width * camera.scale).toInt().coerceIn(1,2048),
+                            targetHeightPx = (obj.bounds.height * camera.scale).toInt().coerceIn(1,2048),posterFrame=payload.posterFrame)
+                        val lease = resourcePort?.read(request)?.getOrNull()
+                        lease?.use {
+                            val tile = it.imageTile
+                            if (tile != null) {
+                                val local = payload.containerBounds ?: obj.transform.invert()?.transformRect(obj.bounds) ?: obj.bounds
+                                val crop = payload.cropRect ?: DocRect(0.0,0.0,payload.naturalWidthPx.toDouble(),payload.naturalHeightPx.toDouble())
+                                softwareSurface?.drawRaster(tile.widthPx,tile.heightPx,local,obj.transform,camera,effectiveOpacity,
+                                    { x,y -> tile.pixelAt(x,y) }, { u,v ->
+                                        val px = u * payload.naturalWidthPx; val py = v * payload.naturalHeightPx
+                                        px >= crop.left && px <= crop.right && py >= crop.top && py <= crop.bottom &&
+                                            (payload.cropMask.isEmpty() || insidePolygon(px,py,payload.cropMask))
+                                    })
+                                counters.drawnTiles++
+                            }
+                        }
                     }
                     is StickyPayload -> {
                         val viewRect = CameraRelativeProjector.projectWorldRectToView(obj.bounds, camera)
                         val colorMod = SoftwareArgbSurface.modulateAlpha(payload.color, effectiveOpacity)
                         softwareSurface?.drawFilledRect(viewRect, colorMod)
+                        if (!payload.isCollapsed) {
+                            val text = payload.richText ?: TextPayload(payload.content)
+                            val result = drawText(obj,text,effectiveOpacity,prepared,camera,softwareSurface,androidCanvas,derivedCache,textPort,counters)
+                            if (result is Outcome.Failure) return result
+                        }
                         counters.drawnShapes += 1
                     }
                     is TapePayload -> {
@@ -542,7 +626,22 @@ class CanvasReplay {
                             payload.patternColor,
                             effectiveOpacity * payload.opacity
                         )
-                        softwareSurface?.drawFilledRect(viewRect, colorMod)
+                        if (obj.id !in prepared.scene.revealedTapeIds) {
+                            if (payload.points.size >= 2) {
+                                val xs = FloatArray(payload.points.size)
+                                val ys = FloatArray(payload.points.size)
+                                payload.points.forEachIndexed { index, point ->
+                                    val world = obj.transform.transformPoint(point)
+                                    xs[index] = (world.x * camera.scale + camera.translateX).toFloat()
+                                    ys[index] = (world.y * camera.scale + camera.translateY).toFloat()
+                                }
+                                softwareSurface?.drawPolyline(xs,ys,xs.size,colorMod,(payload.widthPt * camera.scale).toFloat(),false)
+                                if (payload.pattern != "solid") {
+                                    val detail = SoftwareArgbSurface.modulateAlpha(0xff000000.toInt(),effectiveOpacity * .2f)
+                                    for (index in xs.indices step if(payload.pattern == "dotted") 2 else 3) softwareSurface?.drawFilledCircle(xs[index],ys[index],2f,detail)
+                                }
+                            } else softwareSurface?.drawFilledRect(viewRect, colorMod)
+                        }
                         counters.drawnShapes += 1
                     }
                     else -> {}
@@ -593,6 +692,57 @@ class CanvasReplay {
         }
 
         return Outcome.Success(counters to softwareSurface?.pixels)
+    }
+
+    private fun drawText(obj: SceneObject, payload: TextPayload, opacity: Float, prepared: PreparedScene,
+        camera: CameraTransform, software: SoftwareArgbSurface?, canvas: Canvas?, cache: DerivedArtifactCache,
+        port: TextPort, counters: ReplayCounters): Outcome<Unit,RenderError> {
+        val container = payload.containerBounds ?: obj.transform.invert()?.transformRect(obj.bounds) ?: obj.bounds
+        val result = cache.getOrPutTextLayout(obj.id,obj.version,inkspace.core.codec.CoreCodec.computePayloadDigest(payload),payload,
+            container.width.coerceAtLeast(1.0),port,{ counters.textHits++ },{ counters.textRebuilds++ })
+        if (result is Outcome.Failure) return result
+        val layout = result.getOrNull()!!.layout
+        val artifact = layout.paintPlan
+        if (artifact != null) {
+            if (software != null) {
+                val inverse = obj.transform.invert() ?: return Outcome.Success(Unit)
+                val visible = inverse.transformRect(prepared.visibleWorldRect)
+                val local = DocRect(container.left,container.top,container.left+layout.widthPt,container.top+layout.heightPt)
+                val left = max(local.left,visible.left); val top = max(local.top,visible.top)
+                val right = min(local.right,visible.right); val bottom = min(local.bottom,visible.bottom)
+                if (left < right && top < bottom) {
+                    val region = DocRect(left-container.left,top-container.top,right-container.left,bottom-container.top)
+                    val scale = min(1.0,sqrt(500_000.0 / (region.width * region.height).coerceAtLeast(1.0)))
+                    val raster = artifact.rasterizeRegion(scale,524288,region)
+                    software.drawRaster(raster.width,raster.height,DocRect(left,top,right,bottom),obj.transform,camera,opacity,raster::pixelAt)
+                }
+            }
+            if (canvas != null) {
+                canvas.save()
+                canvas.translate(camera.translateX.toFloat(),camera.translateY.toFloat())
+                canvas.scale(camera.scale.toFloat(),camera.scale.toFloat())
+                val t = obj.transform
+                val matrix = android.graphics.Matrix().apply { setValues(floatArrayOf(t.m00.toFloat(),t.m01.toFloat(),t.m02.toFloat(),t.m10.toFloat(),t.m11.toFloat(),t.m12.toFloat(),0f,0f,1f)) }
+                canvas.concat(matrix); canvas.translate(container.left.toFloat(),container.top.toFloat())
+                val layer = canvas.saveLayerAlpha(null,(opacity * 255).toInt())
+                artifact.draw(canvas); canvas.restoreToCount(layer); canvas.restore()
+            }
+        } else {
+            // Host metric-only ports have no glyph artifact; Android production always supplies one.
+            val rect = CameraRelativeProjector.projectWorldRectToView(obj.bounds,camera)
+            software?.drawFilledRect(ViewFloatRect(rect.left,rect.top,rect.right,min(rect.bottom,rect.top+(payload.fontSizePt*camera.scale).toFloat())),SoftwareArgbSurface.modulateAlpha(payload.fontColor,opacity))
+        }
+        counters.drawnTexts++
+        return Outcome.Success(Unit)
+    }
+    private fun insidePolygon(x: Double,y: Double,points: List<DocPoint>): Boolean {
+        var inside = false
+        var previous = points.last()
+        for (point in points) {
+            if ((point.y > y) != (previous.y > y) && x < (previous.x-point.x)*(y-point.y)/(previous.y-point.y)+point.x) inside = !inside
+            previous = point
+        }
+        return inside
     }
 
     private fun drawCachedStroke(

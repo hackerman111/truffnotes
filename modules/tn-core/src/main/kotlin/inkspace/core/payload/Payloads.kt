@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package inkspace.core.payload
 
 import inkspace.core.id.AssetId
@@ -62,7 +64,9 @@ data class ShapePayload(
     val startArrowhead: ArrowheadStyle = ArrowheadStyle.NONE,
     val endArrowhead: ArrowheadStyle = if (shapeType == ShapeType.Arrow) ArrowheadStyle.OPEN_ARROW else ArrowheadStyle.NONE,
     val startAngleRad: Double = 0.0,
-    val sweepAngleRad: Double = 0.0
+    val sweepAngleRad: Double = 0.0,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val label: TextPayload? = null
 ) : ObjectPayload {
     val frozenVertices: List<DocPoint> = java.util.List.copyOf(vertices)
     val frozenControlPoints: List<DocPoint> = java.util.List.copyOf(controlPoints)
@@ -171,10 +175,22 @@ data class TextPayload(
     val fontSizePt: Double = 12.0,
     val fontColor: Int = 0xFF000000.toInt(),
     val isRtl: Boolean = false,
-    val runs: List<TextRun> = emptyList()
+    val runs: List<TextRun> = emptyList(),
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val paragraph: inkspace.core.text.ParagraphStyle = inkspace.core.text.ParagraphStyle(),
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val fontFamily: String = "sans-serif",
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val fontAsset: AssetId? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val pageBound: Boolean = false,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val containerBounds: DocRect? = null
 ) : ObjectPayload {
     init {
-        require(fontSizePt > 0.0 && fontSizePt.isFinite()) { "fontSizePt must be positive finite" }
+        require(fontSizePt > 0.0 && fontSizePt.isFinite() && fontSizePt <= 10000.0) { "fontSizePt must be positive finite and bounded" }
+        require(text.length <= 1000000 && runs.size <= 100000 && fontFamily.length <= 256)
+        require(runs.all { it.start >= 0 && it.end >= it.start && it.end <= text.length })
     }
 }
 
@@ -185,8 +201,20 @@ data class TextRun(
     val bold: Boolean = false,
     val italic: Boolean = false,
     val underline: Boolean = false,
-    val color: Int? = null
-)
+    val color: Int? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val strike: Boolean = false,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val highlight: Int? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val fontFamily: String? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val fontSizePt: Double? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val fontAsset: AssetId? = null
+) {
+    init { require(start >= 0 && end >= start && (fontSizePt == null || fontSizePt.isFinite() && fontSizePt in 0.1..10000.0) && (fontFamily?.length ?: 0) <= 256) }
+}
 
 @Serializable
 @SerialName("image")
@@ -194,10 +222,20 @@ data class ImagePayload(
     val asset: AssetId,
     val naturalWidthPx: Int,
     val naturalHeightPx: Int,
-    val cropRect: DocRect? = null
+    val cropRect: DocRect? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val cropMask: List<DocPoint> = emptyList(),
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val exifOrientation: Int = 1,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val posterFrame: Int = 0,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val containerBounds: DocRect? = null
 ) : ObjectPayload {
     init {
-        require(naturalWidthPx > 0 && naturalHeightPx > 0) { "Natural dimensions must be positive" }
+        require(naturalWidthPx > 0 && naturalHeightPx > 0 && naturalWidthPx.toLong()*naturalHeightPx <= 100000000L) { "Natural dimensions exceed budget" }
+        require(exifOrientation in 1..8 && posterFrame in 0..119 && cropMask.size <= 10000)
+        require(cropMask.isEmpty() || cropMask.size >= 3)
     }
 }
 
@@ -217,17 +255,32 @@ data class GroupPayload(
 data class StickyPayload(
     val color: Int,
     val content: String,
-    val isCollapsed: Boolean = false
-) : ObjectPayload
+    val isCollapsed: Boolean = false,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val richText: TextPayload? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val attachedIds: List<ObjectId> = emptyList()
+) : ObjectPayload {
+    init { require(content.length <= 1000000 && attachedIds.size <= 10000 && attachedIds.distinct().size == attachedIds.size) }
+}
 
 @Serializable
 @SerialName("tape")
 data class TapePayload(
     val patternColor: Int,
-    val opacity: Float = 0.8f
+    val opacity: Float = 0.8f,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val points: List<DocPoint> = emptyList(),
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val widthPt: Double = 24.0,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val pattern: String = "solid",
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val straight: Boolean = false
 ) : ObjectPayload {
     init {
         require(opacity in 0.0f..1.0f) { "Opacity must be in [0, 1]" }
+        require(points.size <= 64000 && widthPt.isFinite() && widthPt in 0.1..1000.0 && pattern in listOf("solid","stripe","dots","grid","diagonal"))
     }
 }
 
@@ -238,3 +291,10 @@ data class LinkAnchorPayload(
     val targetPage: PageId? = null,
     val targetUrl: String? = null
 ) : ObjectPayload
+
+@Serializable
+@SerialName("pdf-page")
+data class PdfObjectPayload(val page: inkspace.core.pdf.PdfPageRef, val localBounds: DocRect? = null) : ObjectPayload {
+    init { require(page.pageIndex in 0..99999 && page.cropBox.width>0 && page.cropBox.height>0 && page.rotation in listOf(0,90,180,270))
+        require(localBounds==null || localBounds.width>0 && localBounds.height>0) }
+}

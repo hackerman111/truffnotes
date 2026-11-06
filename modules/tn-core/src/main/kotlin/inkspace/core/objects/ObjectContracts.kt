@@ -76,6 +76,7 @@ enum class ObjectKindFilter {
                 is StickyPayload -> STICKY
                 is TapePayload -> TAPE
                 is LinkAnchorPayload -> LINK_ANCHOR
+                is inkspace.core.payload.PdfObjectPayload -> IMAGE
             }
         }
     }

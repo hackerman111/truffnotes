@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package inkspace.core.model
 
 import inkspace.core.codec.CoreCodec
@@ -13,6 +15,7 @@ import inkspace.core.id.SessionEpoch
 import inkspace.core.id.SpaceId
 import inkspace.core.mutation.History
 import inkspace.core.outcome.Outcome
+import inkspace.core.payload.referencedAssetIds
 import inkspace.core.payload.GroupPayload
 import inkspace.core.payload.ImagePayload
 import inkspace.core.payload.LinkAnchorPayload
@@ -193,7 +196,9 @@ data class PageDescriptor(
     val id: PageId,
     val spaceId: SpaceId,
     val widthPt: Double,
-    val heightPt: Double
+    val heightPt: Double,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val metadata: inkspace.core.pages.PageMetadata = inkspace.core.pages.PageMetadata()
 ) {
     init {
         require(widthPt.isFinite() && widthPt > 0.0 && heightPt.isFinite() && heightPt > 0.0) {
@@ -209,7 +214,9 @@ data class LayerDescriptor(
     val name: String,
     val opacity: Float = 1.0f,
     val isVisible: Boolean = true,
-    val isLocked: Boolean = false
+    val isLocked: Boolean = false,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val groupId: String? = null
 ) {
     init {
         require(name.isNotBlank()) { "Layer name cannot be blank" }
@@ -239,6 +246,11 @@ data class SceneObject(
             is StrokePayload -> payload.copy(samples = java.util.List.copyOf(payload.samples))
             is TextPayload -> payload.copy(runs = java.util.List.copyOf(payload.runs))
             is GroupPayload -> payload.copy(members = java.util.List.copyOf(payload.members))
+            is inkspace.core.payload.ShapePayload -> payload.copy(vertices=java.util.List.copyOf(payload.vertices),controlPoints=java.util.List.copyOf(payload.controlPoints),label=payload.label?.copy(runs=java.util.List.copyOf(payload.label.runs)))
+            is inkspace.core.payload.ConnectorPayload -> payload.copy(controlPoints=java.util.List.copyOf(payload.controlPoints))
+            is ImagePayload -> payload.copy(cropMask=java.util.List.copyOf(payload.cropMask))
+            is inkspace.core.payload.StickyPayload -> payload.copy(attachedIds=java.util.List.copyOf(payload.attachedIds),richText=payload.richText?.copy(runs=java.util.List.copyOf(payload.richText.runs)))
+            is inkspace.core.payload.TapePayload -> payload.copy(points=java.util.List.copyOf(payload.points))
             else -> payload
         }
         return if (frozenPayload === payload) this else copy(payload = frozenPayload)
@@ -431,6 +443,13 @@ class ChunkedObjectDirectory internal constructor(
         return result
     }
 
+    fun queryLayers(layers: Set<LayerId>): List<ObjectId> {
+        val ids = ArrayList<ObjectId>()
+        for (branch in branches) if (branch != null) for (leaf in branch.leaves) if (leaf != null)
+            for (entry in leaf.entryArray) if (entry.layer in layers) ids.add(entry.id)
+        return ids
+    }
+
     fun allResidentObjects(): List<SceneObject> {
         val list = ArrayList<SceneObject>()
         for (b in branches) {
@@ -515,7 +534,7 @@ class DocumentSnapshot internal constructor(
     private val parentGroupMap: Map<ObjectId, ObjectId>
 ) : DocumentRead {
 
-    override val pages: List<PageDescriptor> = java.util.List.copyOf(rawPages)
+    override val pages: List<PageDescriptor> = java.util.List.copyOf(rawPages.map { it.copy(metadata=it.metadata.frozen()) })
     override val layers: List<LayerDescriptor> = java.util.List.copyOf(rawLayers)
 
     override val totalObjectCount: Int
@@ -539,6 +558,8 @@ class DocumentSnapshot internal constructor(
 
     override fun parentGroupOf(id: ObjectId): ObjectId? = parentGroupMap[id]
 
+    override fun objectIdsInLayers(layers: Set<LayerId>): List<ObjectId> = directory.queryLayers(layers)
+
     override fun queryBounds(rect: DocRect): List<ObjectId> = directory.queryBounds(rect)
 
     fun orderedSceneObjects(): List<SceneObject> {
@@ -557,10 +578,9 @@ class DocumentSnapshot internal constructor(
         val assets = LinkedHashSet<AssetId>()
         for (obj in directory.allResidentObjects()) {
             val payload = obj.payload
-            if (payload is ImagePayload) {
-                assets.add(payload.asset)
-            }
+            assets.addAll(payload.referencedAssetIds())
         }
+        for(page in pages) { page.metadata.template?.asset?.let(assets::add); page.metadata.pdfBackground?.asset?.let(assets::add) }
         return assets
     }
 
@@ -679,6 +699,8 @@ class DocumentState private constructor(
     override fun getLayer(layerId: LayerId): LayerDescriptor? = currentLayerMap[layerId]
 
     override fun parentGroupOf(id: ObjectId): ObjectId? = currentParentGroups[id]
+
+    override fun objectIdsInLayers(layers: Set<LayerId>): List<ObjectId> = currentDirectory.queryLayers(layers)
 
     override fun queryBounds(rect: DocRect): List<ObjectId> = currentDirectory.queryBounds(rect)
 

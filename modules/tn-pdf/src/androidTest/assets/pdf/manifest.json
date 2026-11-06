@@ -1,0 +1,67 @@
+{
+  "generator": "PyMuPDF 1.27.1",
+  "fixtures": [
+    {
+      "file": "text.pdf",
+      "sha256": "a29275ed6de30737e64f8d2985a7453ddeb86f5ec80a3955bdddb4daca71b085",
+      "pages": 1,
+      "text": "Hello PDF",
+      "links": 1,
+      "outline": 1
+    },
+    {
+      "file": "scan.pdf",
+      "sha256": "e9b8385655670791a318d0a85492f7389f1ea41ef70937f4674373ff640598cc",
+      "pages": 1,
+      "text": ""
+    },
+    {
+      "file": "rotated-crop.pdf",
+      "sha256": "8bfad9260b03390564e3042dbab7e80a9bd5e5b65caba8e1c98bb62575ead2c6",
+      "pages": 1,
+      "rotation": 90,
+      "text": "Rotated crop"
+    },
+    {
+      "file": "encrypted.pdf",
+      "sha256": "f4e51d703e8d2e13e8acfd9a3e7afe7b8ce322e91245a063f1c5adba480e553d",
+      "pages": 1,
+      "password": "fixture-password",
+      "text": "Secret PDF"
+    },
+    {
+      "file": "huge.pdf",
+      "sha256": "c43bafbe1792faae1a26c909e488462a85f7b7d88fec4a2156df01ef71f2e3f4",
+      "pages": 1,
+      "rejected_dimensions": true
+    },
+    {
+      "file": "missing-font.pdf",
+      "sha256": "6d7330c717f6e9483ae562454966b0530c4b7a52db0eb69e3acb3bf32bc0af95",
+      "pages": 1,
+      "text": "Fallback font"
+    },
+    {
+      "file": "internal-links.pdf",
+      "sha256": "b066bea86547551b0ecd4ad5686320e5a3d849debb0228a44018c652a114d02f",
+      "pages": 2,
+      "text": "Go to second page",
+      "internal_target": 1,
+      "outline": 2
+    },
+    {
+      "file": "named-links.pdf",
+      "sha256": "51132c9e36e97ffa7e7e1ccfc97255e09aedc32233caa51a855017ac47a1482d",
+      "pages": 2,
+      "text": "Named destination",
+      "named_destination": "ChapterTwo",
+      "internal_target": 1,
+      "outline": 1
+    },
+    {
+      "file": "damaged.pdf",
+      "sha256": "da94e8684969ca02978f5381b4ec2cb1d481c118925a07dc7e8adfc1f8c5d6b4",
+      "rejected": true
+    }
+  ]
+}

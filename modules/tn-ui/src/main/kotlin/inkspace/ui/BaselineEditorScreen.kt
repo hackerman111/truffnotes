@@ -32,12 +32,14 @@ fun BaselineEditorScreen(
     onSurfaceCreated: (Int, Int) -> Unit,
     onSurfaceChanged: (Int, Int) -> Unit,
     onSurfaceDestroyed: () -> Unit,
-    onMotionEvent: ((MotionEvent) -> Boolean)? = null
+    onMotionEvent: ((MotionEvent) -> Boolean)? = null,
+    showChrome: Boolean = true,
+    onSurfaceAvailable: ((android.view.Surface) -> Unit)? = null
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Top bar hidden when in Focus Mode
-            if (state.viewport?.isFocusMode != true) {
+            if (showChrome && state.viewport?.isFocusMode != true) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -114,6 +116,7 @@ fun BaselineEditorScreen(
                                 object : SurfaceHolder.Callback {
                                     override fun surfaceCreated(holder: SurfaceHolder) {
                                         onSurfaceCreated(width.coerceAtLeast(1), height.coerceAtLeast(1))
+                                        onSurfaceAvailable?.invoke(holder.surface)
                                     }
 
                                     override fun surfaceChanged(
@@ -123,6 +126,7 @@ fun BaselineEditorScreen(
                                         height: Int
                                     ) {
                                         onSurfaceChanged(width.coerceAtLeast(1), height.coerceAtLeast(1))
+                                        onSurfaceAvailable?.invoke(holder.surface)
                                     }
 
                                     override fun surfaceDestroyed(holder: SurfaceHolder) {

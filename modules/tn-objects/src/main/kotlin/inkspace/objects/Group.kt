@@ -78,6 +78,7 @@ object GroupHierarchy {
         val visiting = HashSet<ObjectId>()
 
         fun visit(id: ObjectId): FeatureError? {
+            if(leavesMap.containsKey(id) || groupsMap.containsKey(id)) return null
             when (read.objectState(id)) {
                 ResidencyState.Missing -> return FeatureError.EntityNotFound(id.value)
                 ResidencyState.NotResident -> {
@@ -106,6 +107,9 @@ object GroupHierarchy {
                 groupsMap[id] = obj
             } else {
                 leavesMap[id] = obj
+                if(payload is inkspace.core.payload.StickyPayload) {
+                    for(child in payload.attachedIds) { val err=visit(child);if(err!=null)return err }
+                }
             }
             return null
         }

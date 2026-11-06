@@ -1164,6 +1164,23 @@ data class LinkAnchorPayload(
 val title: String,
 val targetPage: PageId? = null,
 val targetUrl: String? = null
+data class PdfHandle(val id: Long, val epoch: Long)
+data class PdfPageRef(val asset: AssetId, val pageIndex: Int, val cropBox: DocRect, val rotation: Int = 0)
+data class PdfTextSpan(val text: String, val bounds: DocRect, val startUtf16: Int)
+data class PdfLink(val bounds: DocRect, val targetPage: Int? = null, val uri: String? = null)
+data class PdfOutlineEntry(val title: String, val pageIndex: Int, val depth: Int)
+sealed interface PdfReply {
+data class Opened(val handle: PdfHandle, val pageCount: Int) : PdfReply
+data class PageInfo(val page: PdfPageRef) : PdfReply
+data class Text(val spans: List<PdfTextSpan>, val truncated: Boolean = false) : PdfReply
+data class Links(val links: List<PdfLink>) : PdfReply
+data class Outline(val entries: List<PdfOutlineEntry>) : PdfReply
+data class Closed(val handle: PdfHandle) : PdfReply
+data class Failed(val reason: String, val recoverable: Boolean = true) : PdfReply
+class Tile(val handle: PdfHandle, val width: Int, val height: Int, rgba: ByteArray) : PdfReply {
+val size = width.toLong() * height * 4L
+fun copyRgba(): ByteArray = bytes.copyOf()
+val byteSize: Int get() = bytes.size
 data class GeometryRequest(
 val strokeId: ObjectId,
 val origin: DocPoint,
@@ -1284,6 +1301,14 @@ val deletedDraftChunks: Int,
 val reclaimedBytes: Long
 value class RequestId(val value: Long)
 sealed interface PdfRequest {
+data class Open(val asset: AssetId, val password: String? = null) : PdfRequest
+data class Info(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int) : PdfRequest
+data class Tile(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val width: Int, val height: Int, val region: DocRect) : PdfRequest
+data class Text(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val maxChars: Int = 65536) : PdfRequest
+data class Search(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val query: String, val maxMatches: Int = 256) : PdfRequest
+data class Links(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int) : PdfRequest
+data class Outline(val handle: inkspace.core.pdf.PdfHandle, val maxEntries: Int = 4096) : PdfRequest
+data class Close(val handle: inkspace.core.pdf.PdfHandle) : PdfRequest
 data class RenderPage(val pageIndex: Int, val width: Int, val height: Int) : PdfRequest
 sealed interface RenderJob {
 data class Draw(val bounds: DocRect, val revision: Revision) : RenderJob
@@ -1648,3 +1673,46 @@ val vy = (doc.y * scale) + translateY
 fun viewToDoc(view: ViewPoint): DocPoint {
 val dx = (view.x - translateX) / scale
 val dy = (view.y - translateY) / scale
+data class NotebookDefaults(
+val cover: String = "plain", val paper: String = "blank",
+val widthPt: Double = 595.28, val heightPt: Double = 841.89,
+val horizontalScroll: Boolean = false
+data class LibraryEntry(
+val id: String, val name: String, val parentId: String? = null,
+val isFolder: Boolean = false, val favorite: Boolean = false,
+val trashed: Boolean = false, val lastOpened: Long = 0,
+val defaults: NotebookDefaults = NotebookDefaults(), val template: Boolean = false
+enum class LibrarySection { DOCUMENTS, FAVORITES, RECENT, TEMPLATES, TRASH }
+sealed interface LibraryAction {
+data class Create(val id: String, val name: String, val parentId: String? = null,
+val isFolder: Boolean = false, val defaults: NotebookDefaults = NotebookDefaults()) : LibraryAction
+data class Rename(val id: String, val name: String) : LibraryAction
+data class Move(val ids: Set<String>, val parentId: String?) : LibraryAction
+data class Favorite(val ids: Set<String>, val value: Boolean) : LibraryAction
+data class Trash(val ids: Set<String>) : LibraryAction
+data class Restore(val ids: Set<String>) : LibraryAction
+data class Opened(val id: String, val timestamp: Long) : LibraryAction
+data class OperationId(val value: String)
+data class LibraryError(val message: String)
+data class TabState(
+val id: String, val documentId: String, val camera: CameraTransform = CameraTransform(),
+val tool: String = "pen", val readOnly: Boolean = false, val focus: Boolean = false,
+val dirty: Boolean = false, val selectedIds: Set<String> = emptySet()
+data class WorkspaceState(val tabs: List<TabState> = emptyList(), val activeTab: String? = null) {
+val active: TabState? get() = tabs.find { it.id == activeTab }
+sealed interface ViewAction {
+data class Open(val documentId: String) : ViewAction
+data class Switch(val tabId: String) : ViewAction
+data class Close(val tabId: String) : ViewAction
+data class Reorder(val tabIds: List<String>) : ViewAction
+data class Dirty(val dirty: Boolean) : ViewAction
+data class Camera(val camera: CameraTransform) : ViewAction
+data class Command(val id: String) : ViewAction
+data class ViewUpdate(val state: WorkspaceState, val accepted: Boolean, val commandId: String? = null)
+data class CommandDescriptor(val id: String, val changesDocument: Boolean = false)
+interface NotebookGateway {
+fun entries(section: LibrarySection): List<LibraryEntry>
+fun submit(action: LibraryAction): Outcome<OperationId, LibraryError>
+fun dispatch(action: ViewAction): ViewUpdate
+fun resolveKey(key: String, ctrl: Boolean, shift: Boolean, textFocused: Boolean): CommandDescriptor?
+fun workspace(): WorkspaceState

@@ -177,6 +177,7 @@ class Renderer(
                     tileCache = tileCache,
                     geometryPort = geometryPort,
                     textPort = textPort,
+                    resourcePort = resourcePort,
                     androidCanvas = androidCanvas
                 )
                 val (counters, pixels) = when (replayRes) {
@@ -234,6 +235,7 @@ class Renderer(
                     tileCache = tileCache,
                     geometryPort = geometryPort,
                     textPort = textPort,
+                    resourcePort = resourcePort,
                     androidCanvas = androidCanvas
                 )
                 val (counters, pixels) = when (replayRes) {
@@ -291,6 +293,7 @@ class Renderer(
                     tileCache = tileCache,
                     geometryPort = geometryPort,
                     textPort = textPort,
+                    resourcePort = resourcePort,
                     androidCanvas = androidCanvas,
                     pdfVectorCommandsOut = pdfCommands
                 )
@@ -388,6 +391,8 @@ class Renderer(
 
     fun isSurfaceReleased(epoch: SurfaceEpoch): Boolean =
         surfaceManager.isSurfaceReleased(epoch)
+
+    fun releaseTransientTiles() { tileCache.clear() }
 
     fun trimMemory(level: MemoryPressureLevel) {
         when (level) {

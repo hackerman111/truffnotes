@@ -128,6 +128,7 @@ data class Scene(
     val draftStrokes: List<DraftStrokeSceneItem> = emptyList(),
     val ephemeralOverlays: List<EphemeralOverlayItem> = emptyList(),
     val changeSet: ChangeSet? = null,
+    val revealedTapeIds: Set<ObjectId> = emptySet(),
     val tiles: List<TileArtifact> = emptyList()
 ) {
     val frozenDraftStrokes: List<DraftStrokeSceneItem> = java.util.List.copyOf(draftStrokes)

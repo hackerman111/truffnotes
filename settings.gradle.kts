@@ -52,3 +52,21 @@ project(":tn-ui").projectDir = file("modules/tn-ui")
 include(":app")
 project(":app").projectDir = file("app")
 
+
+include(":tn-pages")
+project(":tn-pages").projectDir = file("modules/tn-pages")
+
+include(":tn-text")
+project(":tn-text").projectDir = file("modules/tn-text")
+
+include(":tn-content")
+project(":tn-content").projectDir = file("modules/tn-content")
+
+include(":tn-library")
+project(":tn-library").projectDir = file("modules/tn-library")
+
+include(":tn-workspace")
+project(":tn-workspace").projectDir = file("modules/tn-workspace")
+
+include(":tn-pdf")
+project(":tn-pdf").projectDir = file("modules/tn-pdf")

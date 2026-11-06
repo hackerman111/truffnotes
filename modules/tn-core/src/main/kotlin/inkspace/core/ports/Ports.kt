@@ -49,7 +49,8 @@ data class TextLayoutRequest(
     val text: String,
     val fontSizePt: Double,
     val maxWidthPt: Double,
-    val isRtl: Boolean = false
+    val isRtl: Boolean = false,
+    val payload: inkspace.core.payload.TextPayload? = null
 )
 
 data class TextLayout(
@@ -57,19 +58,24 @@ data class TextLayout(
     val heightPt: Double,
     val lineCount: Int,
     val lines: List<String> = emptyList(),
-    val estimatedBytes: Long = 128L + lines.sumOf { it.length.toLong() * 2L }
+    val estimatedBytes: Long = 128L + lines.sumOf { it.length.toLong() * 2L },
+    val paintPlan: inkspace.core.text.TextPaintArtifact? = null
 )
 
 @Serializable
 data class ResourceRequest(
     val asset: AssetId,
-    val byteBudget: Long
+    val byteBudget: Long,
+    val targetWidthPx: Int = 512,
+    val targetHeightPx: Int = 512,
+    val posterFrame: Int = 0
 )
 
 data class ResourceLease(
     val asset: AssetId,
     val sizeBytes: Long,
-    val isAvailable: Boolean
+    val isAvailable: Boolean,
+    val imageTile: inkspace.core.render.TileArtifact? = null
 ) : AutoCloseable {
     private var releaseAction: (() -> Unit)? = null
     private var closed: Boolean = false
@@ -81,6 +87,11 @@ data class ResourceLease(
         onRelease: () -> Unit
     ) : this(asset, sizeBytes, isAvailable) {
         this.releaseAction = onRelease
+    }
+
+    constructor(asset: AssetId, sizeBytes: Long, isAvailable: Boolean,
+        imageTile: inkspace.core.render.TileArtifact?, onRelease: () -> Unit) : this(asset,sizeBytes,isAvailable,imageTile) {
+        this.releaseAction=onRelease
     }
 
     fun isClosed(): Boolean = closed
@@ -237,6 +248,22 @@ value class RequestId(val value: Long)
 
 @Serializable
 sealed interface PdfRequest {
+    @Serializable
+    data class Open(val asset: AssetId, val password: String? = null) : PdfRequest
+    @Serializable
+    data class Info(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int) : PdfRequest
+    @Serializable
+    data class Tile(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val width: Int, val height: Int, val region: DocRect) : PdfRequest
+    @Serializable
+    data class Text(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val maxChars: Int = 65536, val startIndex: Int = 0) : PdfRequest
+    @Serializable
+    data class Search(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val query: String, val maxMatches: Int = 256) : PdfRequest
+    @Serializable
+    data class Links(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int) : PdfRequest
+    @Serializable
+    data class Outline(val handle: inkspace.core.pdf.PdfHandle, val maxEntries: Int = 4096) : PdfRequest
+    @Serializable
+    data class Close(val handle: inkspace.core.pdf.PdfHandle) : PdfRequest
     @Serializable
     data class RenderPage(val pageIndex: Int, val width: Int, val height: Int) : PdfRequest
 }

@@ -212,7 +212,8 @@ class DerivedArtifactCache(
             text = payload.text,
             fontSizePt = payload.fontSizePt,
             maxWidthPt = maxWidthPt.coerceAtLeast(1.0),
-            isRtl = payload.isRtl
+            isRtl = payload.isRtl,
+            payload = payload
         )
         val layoutOutcome = textPort.layout(req)
         val layout = when (layoutOutcome) {

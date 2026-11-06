@@ -37,6 +37,26 @@ class F04AppLifecycleAndCallbackProfileTest {
     lateinit var tempDir: Path
 
     @Test
+    fun oldSurfaceCallbackKeepsItsSessionAndCannotDetachNewSurface() {
+        val container = TruffnotesAppContainer.create(RuntimeConfig(tempDir.resolve("switch-surface").toString())).getOrNull()!!
+        try {
+            container.openOrRestoreSession(DocumentId("a"))
+            awaitCondition { container.syncEvents(); container.controller.uiState.activeSession?.document == DocumentId("a") }
+            val oldSession = container.controller.uiState.activeSession!!
+            val oldEpoch = container.onSurfaceAttached(800, 1200).getOrNull()!!
+            container.openOrRestoreSession(DocumentId("b"))
+            awaitCondition { container.syncEvents(); container.controller.uiState.activeSession?.document == DocumentId("b") }
+            val newSession = container.controller.uiState.activeSession!!
+            val newEpoch = container.onSurfaceAttached(800, 1200).getOrNull()!!
+            assertEquals(oldEpoch, container.onSurfaceDestroyed(oldSession))
+            assertTrue(container.surfaceHost.isSurfaceActive())
+            assertEquals(newEpoch, container.onSurfaceDestroyed(newSession))
+        } finally {
+            container.closeAsync()
+        }
+    }
+
+    @Test
     fun app_container_handles_rotation_background_reopen_and_profiles_callbacks_under_1ms() {
         val rootDir = tempDir.resolve("app-store").toFile()
         val docId = DocumentId("doc-f04-app-e2e")

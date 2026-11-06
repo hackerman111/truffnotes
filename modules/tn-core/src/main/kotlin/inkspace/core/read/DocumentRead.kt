@@ -24,6 +24,10 @@ interface DocumentRead {
     fun getObjectPayload(id: ObjectId): ObjectPayload?
     fun queryBounds(rect: DocRect): List<ObjectId>
 
+    fun objectIdsInLayers(layers: Set<LayerId>): List<ObjectId> = queryBounds(DocRect(-1e9,-1e9,1e9,1e9)).filter {
+        val obj = getObject(it) ?: throw IllegalArgumentException("Object directory lacks layer header")
+        obj.layer in layers
+    }
     fun getObject(id: ObjectId): SceneObject? = null
     fun getObjectVersion(id: ObjectId): Long? = getObject(id)?.version
     fun isLayerLocked(layerId: LayerId): Boolean = getLayer(layerId)?.isLocked ?: false

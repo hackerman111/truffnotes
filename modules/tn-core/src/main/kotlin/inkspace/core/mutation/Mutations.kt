@@ -22,6 +22,7 @@ import inkspace.core.model.ObjectStyle
 import inkspace.core.model.PageDescriptor
 import inkspace.core.model.SceneObject
 import inkspace.core.outcome.Outcome
+import inkspace.core.payload.referencedAssetIds
 import inkspace.core.payload.GroupPayload
 import inkspace.core.payload.ImagePayload
 import inkspace.core.payload.ObjectPayload
@@ -172,6 +173,18 @@ data class ResizePage(
         }
     }
 }
+
+@Serializable
+@SerialName("update_page_descriptor")
+data class UpdatePageDescriptor(val page: PageDescriptor) : Mutation
+
+@Serializable
+@SerialName("update_layer_descriptor")
+data class UpdateLayerDescriptor(val layer: LayerDescriptor) : Mutation
+
+@Serializable
+@SerialName("relocate_object")
+data class RelocateObject(val id: ObjectId, val layer: LayerId, val space: SpaceId, val targetVersion: Long? = null) : Mutation
 
 @Serializable
 data class Precondition(
@@ -595,8 +608,8 @@ fun validatePlan(document: DocumentRead, plan: EditPlan, limits: Limits): Outcom
                     )
                 }
                 val idx = if (mutation.index in 0..stagedPages.size) mutation.index else stagedPages.size
-                stagedPages.add(idx, mutation.page)
-                stagedPageMap[mutation.page.id] = mutation.page
+                stagedPages.add(idx, mutation.page.copy(metadata=mutation.page.metadata.frozen()))
+                stagedPageMap[mutation.page.id] = mutation.page.copy(metadata=mutation.page.metadata.frozen())
                 anyEffectiveChange = true
             }
 
@@ -627,6 +640,32 @@ fun validatePlan(document: DocumentRead, plan: EditPlan, limits: Limits): Outcom
                 }
             }
 
+            is UpdatePageDescriptor -> {
+                val existing = stagedPageMap[mutation.page.id]
+                    ?: return Outcome.Failure(EditError.EntityNotFound("Page missing"))
+                if (existing.spaceId != mutation.page.spaceId) return Outcome.Failure(EditError.PreconditionFailed("Page space is immutable"))
+                val next = mutation.page.copy(metadata=mutation.page.metadata.frozen())
+                stagedPageMap[next.id] = next
+                stagedPages[stagedPages.indexOfFirst { it.id == next.id }] = next
+                anyEffectiveChange = anyEffectiveChange || next != existing
+            }
+            is UpdateLayerDescriptor -> {
+                val existing = stagedLayerMap[mutation.layer.id]
+                    ?: return Outcome.Failure(EditError.EntityNotFound("Layer missing"))
+                if (existing.pageId != mutation.layer.pageId || existing.isLocked || existing.isLocked != mutation.layer.isLocked) return Outcome.Failure(EditError.LockedEntity("Layer is locked or page changed"))
+                stagedLayerMap[mutation.layer.id] = mutation.layer
+                stagedLayers[stagedLayers.indexOfFirst { it.id == mutation.layer.id }] = mutation.layer
+                anyEffectiveChange = anyEffectiveChange || existing != mutation.layer
+            }
+            is RelocateObject -> {
+                val obj = currentObject(mutation.id) ?: return Outcome.Failure(EditError.EntityNotFound("Object missing"))
+                if (isObjectOrLayerLocked(obj.id,obj)) return Outcome.Failure(EditError.LockedEntity("Object or layer locked"))
+                val layer = stagedLayerMap[mutation.layer] ?: return Outcome.Failure(EditError.EntityNotFound("Target layer missing"))
+                val page = stagedPageMap[layer.pageId] ?: return Outcome.Failure(EditError.EntityNotFound("Target page missing"))
+                if(layer.isLocked || !layer.isVisible || page.spaceId != mutation.space) return Outcome.Failure(EditError.PreconditionFailed("Invalid target layer/space"))
+                stagedObjects[obj.id] = obj.copy(layer=mutation.layer,space=mutation.space,version=mutation.targetVersion ?: obj.version+1)
+                anyEffectiveChange = anyEffectiveChange || obj.layer != mutation.layer || obj.space != mutation.space
+            }
             is ResizePage -> {
                 val existing = stagedPageMap[mutation.pageId]
                     ?: return Outcome.Failure(EditError.EntityNotFound("Page ${mutation.pageId.value} not found"))
@@ -1057,8 +1096,8 @@ fun applyPlan(
 
             is AddPage -> {
                 val idx = if (mutation.index in 0..workingPages.size) mutation.index else workingPages.size
-                workingPages.add(idx, mutation.page)
-                workingPageMap[mutation.page.id] = mutation.page
+                workingPages.add(idx, mutation.page.copy(metadata=mutation.page.metadata.frozen()))
+                workingPageMap[mutation.page.id] = mutation.page.copy(metadata=mutation.page.metadata.frozen())
                 changedPageIds.add(mutation.page.id)
                 stepInverses.add(RemovePage(mutation.page.id))
             }
@@ -1080,6 +1119,27 @@ fun applyPlan(
                 stepInverses.add(ReorderPage(prevOrder))
             }
 
+            is UpdatePageDescriptor -> {
+                val prev = workingPageMap.getValue(mutation.page.id)
+                val next = mutation.page.copy(metadata=mutation.page.metadata.frozen())
+                workingPageMap[next.id] = next
+                workingPages[workingPages.indexOfFirst { it.id == next.id }] = next
+                changedPageIds.add(next.id)
+                stepInverses.add(UpdatePageDescriptor(prev))
+            }
+            is UpdateLayerDescriptor -> {
+                val prev = workingLayerMap.getValue(mutation.layer.id)
+                workingLayerMap[mutation.layer.id] = mutation.layer
+                workingLayers[workingLayers.indexOfFirst { it.id == mutation.layer.id }] = mutation.layer
+                changedLayerIds.add(mutation.layer.id)
+                stepInverses.add(UpdateLayerDescriptor(prev))
+            }
+            is RelocateObject -> {
+                recordBeforeObject(mutation.id)
+                val prev = requireNotNull(workingDir.getObject(mutation.id))
+                workingDir = workingDir.putEntry(DirectoryEntry.Present(prev.copy(layer=mutation.layer,space=mutation.space,version=mutation.targetVersion ?: prev.version+1)))
+                stepInverses.add(RelocateObject(prev.id,prev.layer,prev.space,prev.version))
+            }
             is ResizePage -> {
                 val prev = workingPageMap[mutation.pageId]!!
                 val next = prev.copy(widthPt = mutation.newWidthPt, heightPt = mutation.newHeightPt)
@@ -1110,9 +1170,7 @@ fun applyPlan(
             if (afterObj != null) {
                 newBoundsUnion = newBoundsUnion?.union(afterObj.bounds) ?: afterObj.bounds
                 val p = afterObj.payload
-                if (p is ImagePayload) {
-                    referencedAssets.add(p.asset)
-                }
+                referencedAssets.addAll(p.referencedAssetIds())
                 val op = if (beforeObj == null) "insert" else "update"
                 writeRecords.add(
                     WriteRecord(
@@ -1176,6 +1234,10 @@ fun applyPlan(
         )
     }
 
+    for(page in workingPages) {
+        page.metadata.template?.asset?.let(referencedAssets::add)
+        page.metadata.pdfBackground?.asset?.let(referencedAssets::add)
+    }
     val nextRevision = beforeSnapshot.version.revision.next()
     val nextDocVersion = DocVersion(beforeSnapshot.version.document, nextRevision)
 

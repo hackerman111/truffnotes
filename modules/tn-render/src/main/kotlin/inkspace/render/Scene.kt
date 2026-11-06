@@ -198,9 +198,13 @@ object ScenePreparer {
         val objectsByLayer = HashMap<LayerId, MutableList<SceneObject>>(visibleLayers.size)
         var visibleCount = 0
 
+        val hiddenAttachments = scene.snapshot.directory.allResidentObjects().flatMap { obj ->
+            (obj.payload as? inkspace.core.payload.StickyPayload)?.takeIf { it.isCollapsed }?.attachedIds.orEmpty()
+        }.toSet()
         val candidateIds = scene.snapshot.queryBounds(visibleRect)
         for (id in candidateIds) {
             val obj = scene.snapshot.getObject(id) ?: continue
+            if (id in hiddenAttachments) continue
             if (obj.space != scene.activeSpaceId) {
                 continue
             }

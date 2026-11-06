@@ -1,0 +1,563 @@
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by net.rubygrapefruit.platform.internal.NativeLibraryLoader in an unnamed module (file:/home/papayka/.gradle/wrapper/dists/gradle-9.1.0-bin/9agqghryom9wkf8r80qlhnts3/gradle-9.1.0/lib/native-platform-0.22-milestone-28.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+
+> Task :ktlintCheck
+[ktlintCheck] Clean formatting across 113 Kotlin files.
+
+> Task :detekt
+[detekt] Static analysis pass completed cleanly.
+
+> Task :tn-content:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :tn-core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :tn-core:compileKotlin UP-TO-DATE
+> Task :tn-core:compileJava NO-SOURCE
+> Task :tn-core:processResources NO-SOURCE
+> Task :tn-core:classes UP-TO-DATE
+> Task :tn-core:jar UP-TO-DATE
+> Task :tn-content:compileKotlin UP-TO-DATE
+> Task :tn-content:compileJava NO-SOURCE
+> Task :tn-content:processResources NO-SOURCE
+> Task :tn-content:classes UP-TO-DATE
+> Task :tn-content:jar UP-TO-DATE
+> Task :tn-content:compileTestKotlin UP-TO-DATE
+> Task :tn-content:compileTestJava NO-SOURCE
+> Task :tn-content:processTestResources NO-SOURCE
+> Task :tn-content:testClasses UP-TO-DATE
+> Task :tn-content:test UP-TO-DATE
+> Task :tn-core:compileTestKotlin UP-TO-DATE
+> Task :tn-core:compileTestJava NO-SOURCE
+> Task :tn-core:processTestResources NO-SOURCE
+> Task :tn-core:testClasses UP-TO-DATE
+> Task :tn-core:test UP-TO-DATE
+> Task :tn-ink:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :tn-ink:compileKotlin UP-TO-DATE
+> Task :tn-ink:compileJava NO-SOURCE
+> Task :tn-ink:processResources NO-SOURCE
+> Task :tn-ink:classes UP-TO-DATE
+> Task :tn-ink:jar UP-TO-DATE
+> Task :tn-objects:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :tn-objects:compileKotlin UP-TO-DATE
+> Task :tn-objects:compileJava NO-SOURCE
+> Task :tn-objects:processResources NO-SOURCE
+> Task :tn-objects:classes UP-TO-DATE
+> Task :tn-objects:jar UP-TO-DATE
+> Task :tn-test-support:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :tn-test-support:compileKotlin UP-TO-DATE
+> Task :tn-test-support:compileJava NO-SOURCE
+> Task :tn-test-support:processResources NO-SOURCE
+> Task :tn-test-support:classes UP-TO-DATE
+> Task :tn-test-support:jar UP-TO-DATE
+> Task :tn-ink:compileTestKotlin UP-TO-DATE
+> Task :tn-ink:compileTestJava NO-SOURCE
+> Task :tn-ink:processTestResources NO-SOURCE
+> Task :tn-ink:testClasses UP-TO-DATE
+> Task :tn-ink:test UP-TO-DATE
+> Task :tn-library:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :tn-library:processResources NO-SOURCE
+> Task :tn-library:processTestResources NO-SOURCE
+> Task :tn-objects:compileTestKotlin UP-TO-DATE
+> Task :tn-objects:compileTestJava NO-SOURCE
+> Task :tn-objects:processTestResources NO-SOURCE
+> Task :tn-objects:testClasses UP-TO-DATE
+> Task :tn-objects:test UP-TO-DATE
+> Task :tn-pages:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :tn-pages:compileKotlin UP-TO-DATE
+> Task :tn-pages:compileJava NO-SOURCE
+> Task :tn-pages:processResources NO-SOURCE
+> Task :tn-pages:classes UP-TO-DATE
+> Task :tn-pages:jar UP-TO-DATE
+> Task :tn-pages:compileTestKotlin UP-TO-DATE
+> Task :tn-pages:compileTestJava NO-SOURCE
+> Task :tn-pages:processTestResources NO-SOURCE
+> Task :tn-pages:testClasses UP-TO-DATE
+> Task :tn-pages:test UP-TO-DATE
+> Task :tn-pdf:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :tn-pdf:compileKotlin UP-TO-DATE
+> Task :tn-pdf:compileJava NO-SOURCE
+> Task :tn-pdf:processResources NO-SOURCE
+> Task :tn-pdf:classes UP-TO-DATE
+> Task :tn-pdf:jar UP-TO-DATE
+> Task :tn-pdf:compileTestKotlin UP-TO-DATE
+> Task :tn-pdf:compileTestJava NO-SOURCE
+> Task :tn-pdf:processTestResources NO-SOURCE
+> Task :tn-pdf:testClasses UP-TO-DATE
+> Task :tn-pdf:test UP-TO-DATE
+> Task :tn-test-support:compileTestKotlin UP-TO-DATE
+> Task :tn-test-support:compileTestJava NO-SOURCE
+> Task :tn-test-support:processTestResources NO-SOURCE
+> Task :tn-test-support:testClasses UP-TO-DATE
+> Task :tn-test-support:test UP-TO-DATE
+> Task :tn-workspace:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :tn-workspace:compileKotlin
+> Task :tn-workspace:compileJava NO-SOURCE
+> Task :tn-workspace:processResources NO-SOURCE
+> Task :tn-workspace:classes UP-TO-DATE
+> Task :tn-workspace:jar
+> Task :tn-library:compileKotlin
+> Task :tn-library:compileJava NO-SOURCE
+> Task :tn-library:classes UP-TO-DATE
+> Task :tn-library:jar
+> Task :tn-workspace:compileTestKotlin
+> Task :tn-workspace:compileTestJava NO-SOURCE
+> Task :tn-workspace:processTestResources NO-SOURCE
+> Task :tn-workspace:testClasses UP-TO-DATE
+> Task :tn-library:compileTestKotlin
+> Task :tn-workspace:test
+> Task :tn-library:compileTestJava NO-SOURCE
+> Task :tn-library:testClasses UP-TO-DATE
+> Task :tn-library:test
+> Task :jvmTestAll
+
+> Task :architectureCheck
+[architectureCheck] All architectural module constraints verified successfully.
+
+> Task :apiCheck
+[apiCheck] Public API signature matches docs/contracts/core-api-dump.txt.
+
+> Task :requirementsCheck
+[requirementsCheck] All 40 requirements and 50 acceptance cases verified.
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :tn-platform:preBuild UP-TO-DATE
+> Task :tn-platform:preDebugBuild UP-TO-DATE
+> Task :tn-platform:processDebugNavigationResources UP-TO-DATE
+> Task :tn-render:preBuild UP-TO-DATE
+> Task :tn-render:preDebugBuild UP-TO-DATE
+> Task :tn-render:processDebugNavigationResources UP-TO-DATE
+> Task :tn-runtime:preBuild UP-TO-DATE
+> Task :tn-runtime:preDebugBuild UP-TO-DATE
+> Task :tn-runtime:processDebugNavigationResources UP-TO-DATE
+> Task :tn-store:preBuild UP-TO-DATE
+> Task :tn-store:preDebugBuild UP-TO-DATE
+> Task :tn-store:processDebugNavigationResources UP-TO-DATE
+> Task :tn-text:preBuild UP-TO-DATE
+> Task :tn-text:preDebugBuild UP-TO-DATE
+> Task :tn-text:processDebugNavigationResources UP-TO-DATE
+> Task :tn-ui:preBuild UP-TO-DATE
+> Task :tn-ui:preDebugBuild UP-TO-DATE
+> Task :tn-ui:processDebugNavigationResources UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :tn-platform:generateDebugResources UP-TO-DATE
+> Task :tn-platform:packageDebugResources UP-TO-DATE
+> Task :tn-platform:parseDebugLocalResources UP-TO-DATE
+> Task :tn-platform:generateDebugRFile UP-TO-DATE
+> Task :tn-platform:compileDebugKotlin UP-TO-DATE
+> Task :tn-platform:javaPreCompileDebug UP-TO-DATE
+> Task :tn-platform:compileDebugJavaWithJavac NO-SOURCE
+> Task :tn-platform:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :tn-render:generateDebugResources UP-TO-DATE
+> Task :tn-render:packageDebugResources UP-TO-DATE
+> Task :tn-render:parseDebugLocalResources UP-TO-DATE
+> Task :tn-render:generateDebugRFile UP-TO-DATE
+> Task :tn-render:compileDebugKotlin UP-TO-DATE
+> Task :tn-render:javaPreCompileDebug UP-TO-DATE
+> Task :tn-render:compileDebugJavaWithJavac NO-SOURCE
+> Task :tn-render:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :tn-runtime:generateDebugResources UP-TO-DATE
+> Task :tn-runtime:packageDebugResources UP-TO-DATE
+> Task :tn-runtime:parseDebugLocalResources UP-TO-DATE
+> Task :tn-runtime:generateDebugRFile UP-TO-DATE
+> Task :tn-store:generateDebugResources UP-TO-DATE
+> Task :tn-store:packageDebugResources UP-TO-DATE
+> Task :tn-store:parseDebugLocalResources UP-TO-DATE
+> Task :tn-store:generateDebugRFile UP-TO-DATE
+> Task :tn-store:compileDebugKotlin UP-TO-DATE
+> Task :tn-store:javaPreCompileDebug UP-TO-DATE
+> Task :tn-store:compileDebugJavaWithJavac NO-SOURCE
+> Task :tn-store:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :tn-text:generateDebugResources UP-TO-DATE
+> Task :tn-text:packageDebugResources UP-TO-DATE
+> Task :tn-text:parseDebugLocalResources UP-TO-DATE
+> Task :tn-text:generateDebugRFile UP-TO-DATE
+> Task :tn-text:compileDebugKotlin UP-TO-DATE
+> Task :tn-text:javaPreCompileDebug UP-TO-DATE
+> Task :tn-text:compileDebugJavaWithJavac NO-SOURCE
+> Task :tn-text:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :tn-runtime:javaPreCompileDebug UP-TO-DATE
+> Task :tn-ui:generateDebugResources UP-TO-DATE
+> Task :tn-ui:packageDebugResources UP-TO-DATE
+> Task :tn-ui:parseDebugLocalResources UP-TO-DATE
+> Task :tn-ui:generateDebugRFile UP-TO-DATE
+> Task :tn-ui:compileDebugKotlin UP-TO-DATE
+> Task :tn-ui:javaPreCompileDebug UP-TO-DATE
+> Task :tn-ui:compileDebugJavaWithJavac NO-SOURCE
+> Task :tn-ui:bundleLibCompileToJarDebug UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :tn-platform:writeDebugAarMetadata UP-TO-DATE
+> Task :tn-render:writeDebugAarMetadata UP-TO-DATE
+> Task :tn-runtime:writeDebugAarMetadata UP-TO-DATE
+> Task :tn-store:writeDebugAarMetadata UP-TO-DATE
+> Task :tn-text:writeDebugAarMetadata UP-TO-DATE
+> Task :tn-ui:writeDebugAarMetadata UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :tn-platform:extractDeepLinksDebug UP-TO-DATE
+> Task :tn-platform:processDebugManifest UP-TO-DATE
+> Task :tn-render:extractDeepLinksDebug UP-TO-DATE
+> Task :tn-render:processDebugManifest UP-TO-DATE
+> Task :tn-runtime:extractDeepLinksDebug UP-TO-DATE
+> Task :tn-runtime:processDebugManifest UP-TO-DATE
+> Task :tn-store:extractDeepLinksDebug UP-TO-DATE
+> Task :tn-store:processDebugManifest UP-TO-DATE
+> Task :tn-text:extractDeepLinksDebug UP-TO-DATE
+> Task :tn-text:processDebugManifest UP-TO-DATE
+> Task :tn-ui:extractDeepLinksDebug UP-TO-DATE
+> Task :tn-ui:processDebugManifest UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :tn-platform:compileDebugLibraryResources UP-TO-DATE
+> Task :tn-render:compileDebugLibraryResources UP-TO-DATE
+> Task :tn-runtime:compileDebugLibraryResources UP-TO-DATE
+> Task :tn-store:compileDebugLibraryResources UP-TO-DATE
+> Task :tn-text:compileDebugLibraryResources UP-TO-DATE
+> Task :tn-ui:compileDebugLibraryResources UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :tn-platform:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :tn-platform:processDebugJavaRes UP-TO-DATE
+> Task :tn-render:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :tn-render:processDebugJavaRes UP-TO-DATE
+> Task :tn-store:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :tn-store:processDebugJavaRes UP-TO-DATE
+> Task :tn-text:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :tn-text:processDebugJavaRes UP-TO-DATE
+> Task :tn-ui:bundleLibRuntimeToJarDebug UP-TO-DATE
+> Task :tn-ui:processDebugJavaRes UP-TO-DATE
+> Task :tn-platform:preDebugUnitTestBuild UP-TO-DATE
+> Task :tn-platform:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :tn-platform:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :tn-platform:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :tn-platform:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :tn-platform:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :tn-platform:testDebugUnitTest UP-TO-DATE
+> Task :tn-render:preDebugUnitTestBuild UP-TO-DATE
+> Task :tn-render:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :tn-render:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :tn-render:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :tn-render:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :tn-render:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :tn-render:testDebugUnitTest UP-TO-DATE
+> Task :tn-runtime:preDebugUnitTestBuild UP-TO-DATE
+> Task :tn-runtime:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :tn-runtime:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :tn-store:preDebugUnitTestBuild UP-TO-DATE
+> Task :tn-store:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :tn-store:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :tn-store:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :tn-store:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :tn-store:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :tn-store:testDebugUnitTest UP-TO-DATE
+> Task :tn-text:preDebugUnitTestBuild UP-TO-DATE
+> Task :tn-text:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :tn-text:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :tn-text:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :tn-text:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :tn-text:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :tn-text:testDebugUnitTest UP-TO-DATE
+> Task :tn-ui:preDebugUnitTestBuild UP-TO-DATE
+> Task :tn-ui:generateDebugUnitTestStubRFile UP-TO-DATE
+> Task :tn-ui:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :tn-ui:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :tn-ui:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :tn-ui:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :tn-ui:testDebugUnitTest UP-TO-DATE
+> Task :tn-runtime:checkDebugAarMetadata UP-TO-DATE
+> Task :tn-runtime:mergeDebugJniLibFolders UP-TO-DATE
+> Task :tn-runtime:mergeDebugNativeLibs NO-SOURCE
+> Task :tn-runtime:stripDebugDebugSymbols NO-SOURCE
+> Task :tn-runtime:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :tn-runtime:extractDebugAnnotations
+> Task :tn-runtime:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :tn-runtime:generateDebugAssets UP-TO-DATE
+> Task :tn-runtime:mergeDebugAssets UP-TO-DATE
+> Task :tn-runtime:prepareDebugArtProfile UP-TO-DATE
+> Task :tn-runtime:prepareLintJarForPublish UP-TO-DATE
+> Task :tn-platform:checkDebugAarMetadata UP-TO-DATE
+> Task :tn-platform:mergeDebugJniLibFolders UP-TO-DATE
+> Task :tn-platform:mergeDebugNativeLibs NO-SOURCE
+> Task :tn-platform:stripDebugDebugSymbols NO-SOURCE
+> Task :tn-platform:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :tn-platform:extractDebugAnnotations UP-TO-DATE
+> Task :tn-platform:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :tn-platform:generateDebugAssets UP-TO-DATE
+> Task :tn-platform:mergeDebugAssets UP-TO-DATE
+> Task :tn-platform:mergeDebugGeneratedProguardFiles UP-TO-DATE
+> Task :tn-platform:mergeDebugConsumerProguardFiles UP-TO-DATE
+> Task :tn-platform:prepareDebugArtProfile UP-TO-DATE
+> Task :tn-platform:prepareLintJarForPublish UP-TO-DATE
+> Task :tn-platform:mergeDebugJavaResource UP-TO-DATE
+> Task :tn-platform:syncDebugLibJars UP-TO-DATE
+> Task :tn-platform:bundleDebugLocalLintAar UP-TO-DATE
+> Task :tn-ui:checkDebugAarMetadata UP-TO-DATE
+> Task :tn-ui:mergeDebugJniLibFolders UP-TO-DATE
+> Task :tn-ui:mergeDebugNativeLibs NO-SOURCE
+> Task :tn-ui:stripDebugDebugSymbols NO-SOURCE
+> Task :tn-ui:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :tn-ui:extractDebugAnnotations UP-TO-DATE
+> Task :tn-ui:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :tn-ui:generateDebugAssets UP-TO-DATE
+> Task :tn-ui:mergeDebugAssets UP-TO-DATE
+> Task :tn-ui:mergeDebugGeneratedProguardFiles UP-TO-DATE
+> Task :tn-ui:mergeDebugConsumerProguardFiles UP-TO-DATE
+> Task :tn-ui:prepareDebugArtProfile UP-TO-DATE
+> Task :tn-ui:prepareLintJarForPublish UP-TO-DATE
+> Task :tn-ui:mergeDebugJavaResource UP-TO-DATE
+> Task :tn-ui:syncDebugLibJars UP-TO-DATE
+> Task :tn-ui:bundleDebugLocalLintAar UP-TO-DATE
+> Task :app:preDebugAndroidTestBuild SKIPPED
+> Task :tn-platform:createFullJarDebug UP-TO-DATE
+> Task :tn-platform:writeDebugLintModelMetadata UP-TO-DATE
+> Task :tn-runtime:writeDebugLintModelMetadata UP-TO-DATE
+> Task :tn-ui:createFullJarDebug UP-TO-DATE
+> Task :tn-ui:writeDebugLintModelMetadata UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :tn-platform:extractProguardFiles UP-TO-DATE
+> Task :tn-platform:generateDebugLintModel UP-TO-DATE
+> Task :tn-render:createFullJarDebug UP-TO-DATE
+> Task :tn-render:extractProguardFiles UP-TO-DATE
+> Task :tn-render:generateDebugLintModel UP-TO-DATE
+> Task :tn-render:prepareLintJarForPublish UP-TO-DATE
+> Task :tn-runtime:extractProguardFiles UP-TO-DATE
+> Task :tn-store:createFullJarDebug UP-TO-DATE
+> Task :tn-store:extractProguardFiles UP-TO-DATE
+> Task :tn-store:generateDebugLintModel UP-TO-DATE
+> Task :tn-store:prepareLintJarForPublish UP-TO-DATE
+> Task :tn-text:createFullJarDebug UP-TO-DATE
+> Task :tn-text:extractProguardFiles UP-TO-DATE
+> Task :tn-text:generateDebugLintModel UP-TO-DATE
+> Task :tn-text:prepareLintJarForPublish UP-TO-DATE
+> Task :tn-ui:extractProguardFiles UP-TO-DATE
+> Task :tn-ui:generateDebugLintModel UP-TO-DATE
+> Task :tn-store:checkDebugAarMetadata UP-TO-DATE
+> Task :tn-store:mergeDebugJniLibFolders UP-TO-DATE
+> Task :tn-store:mergeDebugNativeLibs NO-SOURCE
+> Task :tn-store:stripDebugDebugSymbols NO-SOURCE
+> Task :tn-store:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :tn-store:extractDebugAnnotations UP-TO-DATE
+> Task :tn-store:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :tn-store:generateDebugAssets UP-TO-DATE
+> Task :tn-store:mergeDebugAssets UP-TO-DATE
+> Task :tn-store:mergeDebugGeneratedProguardFiles UP-TO-DATE
+> Task :tn-store:mergeDebugConsumerProguardFiles UP-TO-DATE
+> Task :tn-store:prepareDebugArtProfile UP-TO-DATE
+> Task :tn-store:mergeDebugJavaResource UP-TO-DATE
+> Task :tn-store:syncDebugLibJars UP-TO-DATE
+> Task :tn-store:bundleDebugLocalLintAar UP-TO-DATE
+> Task :tn-render:checkDebugAarMetadata UP-TO-DATE
+> Task :tn-render:mergeDebugJniLibFolders UP-TO-DATE
+> Task :tn-render:mergeDebugNativeLibs NO-SOURCE
+> Task :tn-render:stripDebugDebugSymbols NO-SOURCE
+> Task :tn-render:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :tn-render:extractDebugAnnotations UP-TO-DATE
+> Task :tn-render:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :tn-render:generateDebugAssets UP-TO-DATE
+> Task :tn-render:mergeDebugAssets UP-TO-DATE
+> Task :tn-render:mergeDebugGeneratedProguardFiles UP-TO-DATE
+> Task :tn-render:mergeDebugConsumerProguardFiles UP-TO-DATE
+> Task :tn-render:prepareDebugArtProfile UP-TO-DATE
+> Task :tn-render:mergeDebugJavaResource UP-TO-DATE
+> Task :tn-render:syncDebugLibJars UP-TO-DATE
+> Task :tn-render:bundleDebugLocalLintAar UP-TO-DATE
+> Task :tn-text:checkDebugAarMetadata UP-TO-DATE
+> Task :tn-text:mergeDebugJniLibFolders UP-TO-DATE
+> Task :tn-text:mergeDebugNativeLibs NO-SOURCE
+> Task :tn-text:stripDebugDebugSymbols NO-SOURCE
+> Task :tn-text:copyDebugJniLibsProjectAndLocalJars UP-TO-DATE
+> Task :tn-text:extractDebugAnnotations UP-TO-DATE
+> Task :tn-text:extractDeepLinksForAarDebug UP-TO-DATE
+> Task :tn-text:generateDebugAssets UP-TO-DATE
+> Task :tn-text:mergeDebugAssets UP-TO-DATE
+> Task :tn-text:mergeDebugGeneratedProguardFiles UP-TO-DATE
+> Task :tn-text:mergeDebugConsumerProguardFiles UP-TO-DATE
+> Task :tn-text:prepareDebugArtProfile UP-TO-DATE
+> Task :tn-text:mergeDebugJavaResource UP-TO-DATE
+> Task :tn-text:syncDebugLibJars UP-TO-DATE
+> Task :tn-text:bundleDebugLocalLintAar UP-TO-DATE
+> Task :tn-render:writeDebugLintModelMetadata UP-TO-DATE
+> Task :tn-store:writeDebugLintModelMetadata UP-TO-DATE
+> Task :tn-text:writeDebugLintModelMetadata UP-TO-DATE
+> Task :tn-platform:lintAnalyzeDebug UP-TO-DATE
+> Task :tn-render:lintAnalyzeDebug UP-TO-DATE
+> Task :tn-store:lintAnalyzeDebug UP-TO-DATE
+> Task :tn-text:lintAnalyzeDebug UP-TO-DATE
+> Task :tn-ui:lintAnalyzeDebug UP-TO-DATE
+> Task :tn-platform:preDebugAndroidTestBuild UP-TO-DATE
+> Task :tn-platform:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :tn-platform:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :tn-platform:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :tn-platform:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :tn-render:preDebugAndroidTestBuild UP-TO-DATE
+> Task :tn-render:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :tn-render:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :tn-render:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :tn-render:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :tn-runtime:preDebugAndroidTestBuild UP-TO-DATE
+> Task :tn-store:preDebugAndroidTestBuild UP-TO-DATE
+> Task :tn-store:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :tn-store:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :tn-store:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :tn-store:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :tn-text:preDebugAndroidTestBuild UP-TO-DATE
+> Task :tn-text:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :tn-text:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :tn-text:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :tn-text:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :tn-ui:preDebugAndroidTestBuild UP-TO-DATE
+> Task :tn-ui:generateDebugAndroidTestLintModel UP-TO-DATE
+> Task :tn-ui:generateDebugUnitTestLintModel UP-TO-DATE
+> Task :tn-ui:lintAnalyzeDebugAndroidTest UP-TO-DATE
+> Task :tn-ui:lintAnalyzeDebugUnitTest UP-TO-DATE
+> Task :tn-platform:generateDebugLintReportModel UP-TO-DATE
+> Task :tn-platform:lintReportDebug UP-TO-DATE
+> Task :tn-platform:lintDebug
+> Task :tn-platform:lint
+> Task :tn-render:generateDebugLintReportModel UP-TO-DATE
+> Task :tn-render:lintReportDebug UP-TO-DATE
+> Task :tn-render:lintDebug
+> Task :tn-render:lint
+> Task :tn-store:generateDebugLintReportModel UP-TO-DATE
+> Task :tn-store:lintReportDebug UP-TO-DATE
+> Task :tn-store:lintDebug
+> Task :tn-store:lint
+> Task :tn-text:generateDebugLintReportModel UP-TO-DATE
+> Task :tn-text:lintReportDebug UP-TO-DATE
+> Task :tn-text:lintDebug
+> Task :tn-text:lint
+> Task :tn-ui:generateDebugLintReportModel UP-TO-DATE
+> Task :tn-ui:lintReportDebug UP-TO-DATE
+> Task :tn-ui:lintDebug
+> Task :tn-ui:lint
+> Task :app:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:generateDebugAssets UP-TO-DATE
+> Task :app:mergeDebugAssets UP-TO-DATE
+> Task :app:compressDebugAssets UP-TO-DATE
+> Task :app:desugarDebugFileDependencies UP-TO-DATE
+> Task :app:checkDebugDuplicateClasses UP-TO-DATE
+> Task :app:mergeExtDexDebug UP-TO-DATE
+> Task :tn-platform:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :tn-ui:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :tn-store:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :tn-render:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :tn-text:bundleLibRuntimeToDirDebug UP-TO-DATE
+> Task :app:mergeDebugJniLibFolders UP-TO-DATE
+> Task :tn-platform:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :tn-render:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :tn-runtime:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :tn-store:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :tn-text:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :tn-ui:copyDebugJniLibsProjectOnly UP-TO-DATE
+> Task :app:mergeDebugNativeLibs UP-TO-DATE
+> Task :app:stripDebugDebugSymbols UP-TO-DATE
+> Task :app:validateSigningDebug UP-TO-DATE
+> Task :app:writeDebugAppMetadata UP-TO-DATE
+> Task :app:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :tn-platform:bundleDebugAar UP-TO-DATE
+> Task :tn-platform:assembleDebug UP-TO-DATE
+> Task :tn-render:bundleDebugAar UP-TO-DATE
+> Task :tn-render:assembleDebug UP-TO-DATE
+> Task :tn-store:bundleDebugAar UP-TO-DATE
+> Task :tn-store:assembleDebug UP-TO-DATE
+> Task :tn-text:bundleDebugAar UP-TO-DATE
+> Task :tn-text:assembleDebug UP-TO-DATE
+> Task :tn-ui:bundleDebugAar UP-TO-DATE
+> Task :tn-ui:assembleDebug UP-TO-DATE
+
+> Task :tn-runtime:compileDebugKotlin
+w: file:///home/papayka/Rust_project/truffnotes/modules/tn-runtime/src/main/kotlin/inkspace/runtime/ExecutorsAndPool.kt:20:48 'val id: Long' is deprecated. Deprecated in Java.
+w: file:///home/papayka/Rust_project/truffnotes/modules/tn-runtime/src/main/kotlin/inkspace/runtime/ExecutorsAndPool.kt:30:45 'val id: Long' is deprecated. Deprecated in Java.
+w: file:///home/papayka/Rust_project/truffnotes/modules/tn-runtime/src/main/kotlin/inkspace/runtime/WorkspaceGateway.kt:114:20 Unnecessary safe call on a non-null receiver of type 'SessionKey'.
+
+> Task :tn-runtime:compileDebugJavaWithJavac NO-SOURCE
+> Task :tn-runtime:bundleLibCompileToJarDebug
+> Task :tn-runtime:bundleLibRuntimeToJarDebug
+> Task :tn-runtime:processDebugJavaRes UP-TO-DATE
+> Task :app:compileDebugKotlin
+> Task :app:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:compileDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :tn-runtime:compileDebugUnitTestKotlin
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::loadLibrary has been called by androidx.sqlite.driver.bundled.NativeLibraryLoader in an unnamed module (file:/home/papayka/.gradle/caches/modules-2/files-2.1/androidx.sqlite/sqlite-bundled-jvm/2.7.1/ab882d5991b28bcbe4a02f480284f4c3c3a84bb9/sqlite-bundled-jvm-2.7.1.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+> Task :app:testDebugUnitTest
+> Task :tn-runtime:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :tn-runtime:processDebugUnitTestJavaRes UP-TO-DATE
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::loadLibrary has been called by androidx.sqlite.driver.bundled.NativeLibraryLoader in an unnamed module (file:/home/papayka/.gradle/caches/modules-2/files-2.1/androidx.sqlite/sqlite-bundled-jvm/2.7.1/ab882d5991b28bcbe4a02f480284f4c3c3a84bb9/sqlite-bundled-jvm-2.7.1.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+> Task :tn-runtime:testDebugUnitTest
+> Task :androidUnitTestAll
+> Task :tn-runtime:mergeDebugGeneratedProguardFiles UP-TO-DATE
+> Task :tn-runtime:mergeDebugConsumerProguardFiles UP-TO-DATE
+> Task :tn-runtime:mergeDebugJavaResource UP-TO-DATE
+> Task :tn-runtime:syncDebugLibJars
+> Task :tn-runtime:bundleDebugLocalLintAar
+> Task :tn-runtime:createFullJarDebug
+> Task :tn-runtime:generateDebugLintModel
+> Task :app:generateDebugAndroidTestLintModel
+> Task :app:generateDebugLintReportModel
+> Task :app:generateDebugUnitTestLintModel
+> Task :app:lintAnalyzeDebugAndroidTest
+> Task :app:lintAnalyzeDebugUnitTest
+> Task :tn-runtime:generateDebugAndroidTestLintModel
+> Task :tn-runtime:generateDebugUnitTestLintModel
+> Task :tn-runtime:lintAnalyzeDebugAndroidTest
+> Task :tn-runtime:lintAnalyzeDebugUnitTest
+> Task :tn-runtime:generateDebugLintReportModel
+> Task :app:dexBuilderDebug
+> Task :app:mergeDebugGlobalSynthetics UP-TO-DATE
+> Task :tn-runtime:lintAnalyzeDebug
+> Task :app:mergeDebugJavaResource
+> Task :tn-runtime:lintReportDebug
+> Task :tn-runtime:lintDebug
+> Task :tn-runtime:lint
+> Task :tn-runtime:bundleLibRuntimeToDirDebug
+> Task :app:mergeLibDexDebug
+> Task :app:mergeProjectDexDebug
+> Task :app:packageDebug
+> Task :app:createDebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleDebug
+> Task :tn-runtime:bundleDebugAar
+> Task :tn-runtime:assembleDebug
+> Task :assembleDebug
+> Task :app:lintAnalyzeDebug
+
+> Task :app:lintReportDebug
+Wrote HTML report to file:///home/papayka/Rust_project/truffnotes/app/build/reports/lint-results-debug.html
+
+> Task :app:lintDebug
+> Task :app:lint
+> Task :lint
+
+[Incubating] Problems report is available at: file:///home/papayka/Rust_project/truffnotes/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 10.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/9.1.0/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 9s
+374 actionable tasks: 56 executed, 318 up-to-date

@@ -22,6 +22,7 @@ class TruffnotesApplication : Application() {
             ports = PlatformPorts()
         )
         if (started is Outcome.Success) {
+            started.value.runtime.configureAndroid(this)
             appContainer = started.value
         }
     }
