@@ -47,6 +47,7 @@ object ObjectPlanner {
             is ObjectAction.Delete -> planDelete(read, action, ctx)
             is ObjectAction.Duplicate -> planDuplicate(read, action, ctx)
             is ObjectAction.Paste -> planPaste(read, action, ctx)
+            is ObjectAction.ShapeAction -> ShapePlanner.plan(read, action, ctx)
         }
     }
 
@@ -149,6 +150,43 @@ object ObjectPlanner {
         for (leaf in expanded.leafObjects) {
             preconditions.add(Precondition(leaf.id.value, leaf.version))
             mutations.add(RemoveObject(leaf.id))
+        }
+
+        // Handle connectors connected to deleted targets according to their dangling policy
+        val allSpaceIds = read.queryBounds(DocRect(-1e8, -1e8, 1e8, 1e8))
+        for (id in allSpaceIds) {
+            if (id in removedIds) continue
+            val obj = read.getObject(id) ?: continue
+            val cPayload = obj.payload as? ConnectorPayload ?: continue
+            val srcDeleted = cPayload.sourceId in removedIds
+            val dstDeleted = cPayload.targetId in removedIds
+            if (srcDeleted || dstDeleted) {
+                preconditions.add(Precondition(obj.id.value, obj.version))
+                if (cPayload.danglingPolicy == inkspace.core.payload.DanglingEndpointPolicy.DELETE_CONNECTOR) {
+                    mutations.add(RemoveObject(obj.id))
+                } else {
+                    val nextPayload = cPayload.copy(
+                        sourceAnchor = if (srcDeleted) {
+                            inkspace.core.payload.ConnectorAnchor(side = inkspace.core.payload.AnchorSide.CUSTOM)
+                        } else {
+                            cPayload.sourceAnchor
+                        },
+                        targetAnchor = if (dstDeleted) {
+                            inkspace.core.payload.ConnectorAnchor(side = inkspace.core.payload.AnchorSide.CUSTOM)
+                        } else {
+                            cPayload.targetAnchor
+                        }
+                    )
+                    mutations.add(
+                        UpdatePayload(
+                            id = obj.id,
+                            newPayload = nextPayload,
+                            newBounds = obj.bounds,
+                            targetVersion = obj.version + 1L
+                        )
+                    )
+                }
+            }
         }
 
         return Outcome.Success(

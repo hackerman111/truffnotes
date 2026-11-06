@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "phase": "F08",
+  "seed": 20261105,
+  "positive_fixtures": [
+    {
+      "id": "straight_line",
+      "expected_shape": "Line",
+      "sample_count": 50,
+      "description": "Horizontal, vertical, and diagonal straight line strokes with terminal hold"
+    },
+    {
+      "id": "arrow",
+      "expected_shape": "Arrow",
+      "sample_count": 50,
+      "description": "Straight stroke with terminal arrowhead barb"
+    },
+    {
+      "id": "circle",
+      "expected_shape": "Circle",
+      "sample_count": 60,
+      "description": "Equidimensional closed circular loop with terminal hold"
+    },
+    {
+      "id": "ellipse",
+      "expected_shape": "Ellipse",
+      "sample_count": 60,
+      "description": "Elongated closed loop with terminal hold"
+    },
+    {
+      "id": "square",
+      "expected_shape": "Square",
+      "sample_count": 60,
+      "description": "4-corner closed polygon with aspect ratio ~1.0 and 90-degree corners"
+    },
+    {
+      "id": "rectangle",
+      "expected_shape": "Rectangle",
+      "sample_count": 60,
+      "description": "4-corner closed polygon with aspect ratio != 1.0 and 90-degree corners"
+    },
+    {
+      "id": "rounded_rectangle",
+      "expected_shape": "RoundedRectangle",
+      "sample_count": 60,
+      "description": "4-corner closed polygon with rounded corners"
+    },
+    {
+      "id": "triangle",
+      "expected_shape": "Triangle",
+      "sample_count": 60,
+      "description": "3-corner closed polygon"
+    },
+    {
+      "id": "polygon",
+      "expected_shape": "Polygon",
+      "sample_count": 50,
+      "description": "5- or 6-corner closed polygon"
+    },
+    {
+      "id": "polyline",
+      "expected_shape": "Polyline",
+      "sample_count": 50,
+      "description": "Open multi-segment line with distinct sharp corners"
+    },
+    {
+      "id": "arc",
+      "expected_shape": "Arc",
+      "sample_count": 50,
+      "description": "Open circular or elliptical smooth arc segment"
+    },
+    {
+      "id": "curve",
+      "expected_shape": "Curve",
+      "sample_count": 50,
+      "description": "Open smooth curved stroke (spline/bezier)"
+    },
+    {
+      "id": "scribble",
+      "expected_shape": "ScribbleErase",
+      "sample_count": 50,
+      "description": "Rapid zig-zag reversal stroke with >= 4 reversals"
+    },
+    {
+      "id": "circle_lift_rehold",
+      "expected_shape": "CircleToLasso",
+      "sample_count": 50,
+      "description": "Drawn closed loop followed by lift and re-hold on perimeter"
+    },
+    {
+      "id": "two_finger_double_tap",
+      "expected_gesture": "TwoFingerUndo",
+      "sample_count": 30,
+      "description": "Two-finger double-tap triggering undo"
+    },
+    {
+      "id": "three_finger_double_tap",
+      "expected_gesture": "ThreeFingerRedo",
+      "sample_count": 30,
+      "description": "Three-finger double-tap triggering redo"
+    }
+  ],
+  "negative_fixtures": {
+    "total_negative_samples": 2200,
+    "categories": [
+      {
+        "category": "ambiguous_handwriting_words",
+        "sample_count": 800,
+        "description": "Cursive and print handwriting words with natural letter loops and ascenders/descenders"
+      },
+      {
+        "category": "math_equations_and_symbols",
+        "sample_count": 500,
+        "description": "Integrals, square roots, plus/minus, fractions, fractions bars, sigma"
+      },
+      {
+        "category": "freehand_artistic_sketches",
+        "sample_count": 500,
+        "description": "Hatching, cross-hatching, organic curved shading, tree branches, facial contours"
+      },
+      {
+        "category": "sub_threshold_holds",
+        "sample_count": 400,
+        "description": "Near-geometric shapes lifted before hold threshold (< 400ms)"
+      }
+    ],
+    "verification_gates": {
+      "min_true_positive_rate": 0.95,
+      "max_false_positive_rate": 0.005,
+      "ambiguous_preservation_rate": 1.00
+    }
+  }
+}

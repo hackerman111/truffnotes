@@ -100,7 +100,23 @@ internal class ActivePointerStrokeState(
 ) {
     val residentSamples = ArrayList<StrokeSamplePoint>(128)
     val spooledRefs = ArrayList<StagedChunkRef>()
+    val allWorldPoints = ArrayList<DocPoint>(128)
+    val allTimestampsMs = ArrayList<Long>(128)
+    var lastMovementTimestampMs: Long = lastTimestampMs
+    var currentHoldDurationMs: Long = 0L
     var totalRealSamplesIngested: Int = 0
+
+    fun toStrokeData(ctx: InputContext, isLifted: Boolean): inkspace.core.objects.StrokeData {
+        return inkspace.core.objects.StrokeData(
+            origin = currentChunkOrigin,
+            samples = java.util.List.copyOf(residentSamples),
+            brushKind = ctx.brush.kind,
+            baseWidthPt = ctx.brush.baseWidthPt,
+            colorArgb = ctx.brush.colorArgb,
+            holdDurationMs = currentHoldDurationMs,
+            isClosedLoop = false
+        )
+    }
 
     fun currentResidentBytes(): Long {
         return residentSamples.size.toLong() * ImmutableInputBatch.BYTES_PER_SAMPLE.toLong()
@@ -123,6 +139,23 @@ internal class ActivePointerStrokeState(
             }
             lastTimestampMs = max(lastTimestampMs, ts)
             lastDocPoint = docPt
+
+            allWorldPoints.add(docPt)
+            allTimestampsMs.add(ts)
+            val moveDist = if (allWorldPoints.size <= 1) {
+                0.0
+            } else {
+                val prev = allWorldPoints[allWorldPoints.size - 2]
+                val dX = docPt.x - prev.x
+                val dY = docPt.y - prev.y
+                kotlin.math.sqrt(dX * dX + dY * dY)
+            }
+            if (moveDist > 2.0) {
+                lastMovementTimestampMs = ts
+                currentHoldDurationMs = 0L
+            } else {
+                currentHoldDurationMs = max(0L, ts - lastMovementTimestampMs)
+            }
 
             var relX = docPt.x - currentChunkOrigin.x
             var relY = docPt.y - currentChunkOrigin.y

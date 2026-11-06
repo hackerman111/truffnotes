@@ -261,6 +261,13 @@ class InkEngine(
             return appendOutcome
         }
 
+        val gestureDecision = if (state.mode == EffectiveInkToolMode.DRAW) {
+            val strokeData = state.toStrokeData(ctx, isLifted = (batch.action == InputActionKind.UP))
+            GestureArbiter.arbitrate(strokeData, ctx, strokeId = state.strokeId)
+        } else {
+            null
+        }
+
         return if (batch.action == InputActionKind.UP) {
             activePointers.remove(batch.pointerId)
             val planOutcome = if (state.mode == EffectiveInkToolMode.DRAW) {
@@ -282,6 +289,8 @@ class InkEngine(
                         predictedOverlay = null,
                         commitPlan = planOutcome.value,
                         spooledChunkRefs = state.spooledRefs,
+                        gestureDecision = gestureDecision,
+                        holdDurationMs = state.currentHoldDurationMs,
                         residentWindowBytes = 0L,
                         residentSampleCount = 0,
                         totalRealSamplesIngested = state.totalRealSamplesIngested
@@ -301,6 +310,8 @@ class InkEngine(
                     predictedOverlay = predOverlay,
                     commitPlan = null,
                     spooledChunkRefs = state.spooledRefs,
+                    gestureDecision = gestureDecision,
+                    holdDurationMs = state.currentHoldDurationMs,
                     residentWindowBytes = state.currentResidentBytes(),
                     residentSampleCount = state.residentSamples.size,
                     totalRealSamplesIngested = state.totalRealSamplesIngested

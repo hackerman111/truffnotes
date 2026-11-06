@@ -512,6 +512,107 @@ data class BrushSpec(
 }
 
 @Serializable
+enum class ActiveToolKind {
+    PEN,
+    HIGHLIGHTER,
+    ERASER,
+    LASSO,
+    SHAPE,
+    RULER,
+    READ_ONLY
+}
+
+@Serializable
+enum class StylusButtonAction {
+    TEMPORARY_ERASER,
+    LASSO,
+    NONE
+}
+
+@Serializable
+enum class GesturePriorityLevel(val precedence: Int) {
+    SYSTEM_INTERCEPT(1),
+    ACTIVE_OPERATION(2),
+    EXPLICIT_TOOL(3),
+    FINGER_NAVIGATION(4),
+    STYLUS_GEOMETRIC_GESTURE(5),
+    NORMAL_INK(6)
+}
+
+@Serializable
+data class GestureSettings(
+    val geometricGesturesEnabled: Boolean = true,
+    val holdToShapeEnabled: Boolean = true,
+    val holdThresholdMs: Long = 400L,
+    val circleToLassoEnabled: Boolean = true,
+    val circleReholdLineTolerancePt: Double = 24.0,
+    val circleReholdThresholdMs: Long = 300L,
+    val circleReholdWindowMs: Long = 1200L,
+    val scribbleEraseEnabled: Boolean = true,
+    val scribbleMinReversals: Int = 4,
+    val scribbleAngleToleranceDeg: Double = 45.0,
+    val scribbleEnvelopeTolerancePt: Double = 36.0,
+    val twoFingerUndoEnabled: Boolean = true,
+    val threeFingerRedoEnabled: Boolean = true,
+    val multiTapMaxDurationMs: Long = 350L,
+    val multiTapMaxDistancePt: Double = 20.0
+) {
+    fun resetToDefaults(): GestureSettings = GestureSettings()
+}
+
+@Serializable
+data class MultiTapGestureEvent(
+    val fingerCount: Int,
+    val tapCount: Int,
+    val positionDoc: DocPoint,
+    val timestampMs: Long
+)
+
+sealed interface GestureProposal {
+    data class ShapeHold(
+        val strokeId: ObjectId,
+        val shapeCandidate: inkspace.core.objects.ShapeCandidate.Recognized,
+        val holdDurationMs: Long
+    ) : GestureProposal
+
+    data class CircleToLasso(
+        val strokeId: ObjectId,
+        val enclosedBounds: inkspace.core.unit.DocRect
+    ) : GestureProposal
+
+    data class ScribbleErase(
+        val erasedStrokeIds: Set<ObjectId>,
+        val envelope: inkspace.core.unit.DocRect
+    ) : GestureProposal {
+        val frozenErasedStrokeIds: Set<ObjectId> = java.util.Collections.unmodifiableSet(erasedStrokeIds)
+    }
+
+    data class MultiFingerUndoRedo(
+        val isRedo: Boolean,
+        val fingerCount: Int
+    ) : GestureProposal
+
+    data class Navigation(
+        val deltaDoc: DocPoint
+    ) : GestureProposal
+
+    data class SystemIntercept(
+        val reason: String
+    ) : GestureProposal
+}
+
+sealed interface GestureDecision {
+    data class ExecuteShape(val proposal: GestureProposal.ShapeHold) : GestureDecision
+    data class ExecuteLassoSelection(val proposal: GestureProposal.CircleToLasso) : GestureDecision
+    data class ExecuteScribbleErase(val proposal: GestureProposal.ScribbleErase) : GestureDecision
+    data class ExecuteUndoRedo(val proposal: GestureProposal.MultiFingerUndoRedo) : GestureDecision
+    data class ExecuteNavigation(val proposal: GestureProposal.Navigation) : GestureDecision
+    data class ConsumeAsSystem(val proposal: GestureProposal.SystemIntercept) : GestureDecision
+    object FallbackToInk : GestureDecision
+    object Ignored : GestureDecision
+}
+
+@Serializable
 data class StylusInputPolicy(
     val stylusOnlyDrawing: Boolean = false,
     val palmRejectionEnabled: Boolean = true,
@@ -573,6 +674,10 @@ data class InputContext(
     val camera: CameraTransform = CameraTransform(),
     val brush: BrushSpec = BrushSpec(),
     val policy: StylusInputPolicy = StylusInputPolicy(),
+    val gestureSettings: GestureSettings = GestureSettings(),
+    val activeTool: ActiveToolKind = ActiveToolKind.PEN,
+    val hasActiveOperation: Boolean = false,
+    val isSystemGestureIntercepted: Boolean = false,
     val maxResidentWindowBytes: Long = MemoryCategory.DRAFT_STROKE_WINDOW.defaultCapBytes,
     val maxSamplesPerResidentChunk: Int = 2048
 ) {
@@ -596,6 +701,8 @@ data class InkOutput(
     val navigationDeltaDoc: DocPoint? = null,
     val commitPlan: EditPlan? = null,
     val spooledChunkRefs: List<StagedChunkRef> = emptyList(),
+    val gestureDecision: GestureDecision? = null,
+    val holdDurationMs: Long = 0L,
     val residentWindowBytes: Long = 0L,
     val residentSampleCount: Int = 0,
     val totalRealSamplesIngested: Int = 0

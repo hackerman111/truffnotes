@@ -23,6 +23,7 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
 
     testImplementation(project(":tn-test-support"))
+    testImplementation(project(":tn-objects"))
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlin.test.junit5)
     testImplementation(libs.junit.jupiter.api)

@@ -255,11 +255,11 @@ W4 — stress, не обещание 60 FPS при 10000 одновременн�
 
 **API:** ShapeAction внутри ObjectAction; GestureProposal/GestureDecision/guide/connector contracts. `ShapeRecognizer.recognize(stroke: StrokeData, config: RecognitionConfig): ShapeCandidate` без handwriting/ML recognition.
 
-- [ ] F08.1 Freeze positive/negative gesture corpus: straight/circle/square/ellipse/triangle/polygon/arc/curve/ambiguous handwriting, hold times, circle-lift-rehold и scribble. Tests детерминированы fake clock и реальными input traces.
-- [ ] F08.2 Реализовать геометрические fit/corner/closure criteria и редактируемые shape payloads, rounded rect/fill/vertices/arrowheads. Не распознавать слова/формулы.
-- [ ] F08.3 Реализовать connector anchors/control points, следование перемещению/resize targets, delete policy для dangling endpoint и quick-diagram create+connect одной транзакцией.
-- [ ] F08.4 Один gesture arbiter соблюдает приоритеты ТЗ: active operation/explicit tool/navigation/geometric gesture/ink; ambiguous input сохраняет исходник. Scribble удаляет только подходящие pen strokes; Circle selection не запускает shape одновременно. Отдельные fixtures для double-tap двумя пальцами Undo и тремя Redo не путаются с page double-tap zoom; системный перехват жеста имеет приоритет.
-- [ ] F08.5 Реализовать ruler two-edge snap/angle/position/cm-inch, protractor/guides/snap-grid/angle/object alignment; overlay transform общий с документом. Настройки enable/thresholds передаются typed config.
+- [x] F08.1 Freeze positive/negative gesture corpus: straight/circle/square/ellipse/triangle/polygon/arc/curve/ambiguous handwriting, hold times, circle-lift-rehold и scribble. Tests детерминированы fake clock и реальными input traces.
+- [x] F08.2 Реализовать геометрические fit/corner/closure criteria и редактируемые shape payloads, rounded rect/fill/vertices/arrowheads. Не распознавать слова/формулы.
+- [x] F08.3 Реализовать connector anchors/control points, следование перемещению/resize targets, delete policy для dangling endpoint и quick-diagram create+connect одной транзакцией.
+- [x] F08.4 Один gesture arbiter соблюдает приоритеты ТЗ: active operation/explicit tool/navigation/geometric gesture/ink; ambiguous input сохраняет исходник. Scribble удаляет только подходящие pen strokes; Circle selection не запускает shape одновременно. Отдельные fixtures для double-tap двумя пальцами Undo и тремя Redo не путаются с page double-tap zoom; системный перехват жеста имеет приоритет.
+- [x] F08.5 Реализовать ruler two-edge snap/angle/position/cm-inch, protractor/guides/snap-grid/angle/object alignment; overlay transform общий с документом. Настройки enable/thresholds передаются typed config.
 
 **Gate:** `gesture_corpus` true positives ≥95%, false positives ≤0.5% на ≥2000 замороженных отрицательных samples; ambiguous set 100% сохраняет original. Все shape kinds/manual edits, connector move/delete, ruler numerical tests PASS; Undo каждого распознанного жеста возвращает исходное состояние одним действием. Настройки threshold не подгоняются на acceptance corpus.
 

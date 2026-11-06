@@ -220,6 +220,57 @@ fun fromBrushIdString(
 val kind = BrushKind.fromBrushId(brushId)
 val parts = brushId.split(':')
 val kv = parts[i].split('=', limit = 2)
+enum class ActiveToolKind {
+enum class StylusButtonAction {
+enum class GesturePriorityLevel(val precedence: Int) {
+data class GestureSettings(
+val geometricGesturesEnabled: Boolean = true,
+val holdToShapeEnabled: Boolean = true,
+val holdThresholdMs: Long = 400L,
+val circleToLassoEnabled: Boolean = true,
+val circleReholdLineTolerancePt: Double = 24.0,
+val circleReholdThresholdMs: Long = 300L,
+val circleReholdWindowMs: Long = 1200L,
+val scribbleEraseEnabled: Boolean = true,
+val scribbleMinReversals: Int = 4,
+val scribbleAngleToleranceDeg: Double = 45.0,
+val scribbleEnvelopeTolerancePt: Double = 36.0,
+val twoFingerUndoEnabled: Boolean = true,
+val threeFingerRedoEnabled: Boolean = true,
+val multiTapMaxDurationMs: Long = 350L,
+val multiTapMaxDistancePt: Double = 20.0
+fun resetToDefaults(): GestureSettings = GestureSettings()
+data class MultiTapGestureEvent(
+val fingerCount: Int,
+val tapCount: Int,
+val positionDoc: DocPoint,
+val timestampMs: Long
+sealed interface GestureProposal {
+data class ShapeHold(
+val strokeId: ObjectId,
+val shapeCandidate: inkspace.core.objects.ShapeCandidate.Recognized,
+val holdDurationMs: Long
+data class CircleToLasso(
+val strokeId: ObjectId,
+val enclosedBounds: inkspace.core.unit.DocRect
+data class ScribbleErase(
+val erasedStrokeIds: Set<ObjectId>,
+val envelope: inkspace.core.unit.DocRect
+val frozenErasedStrokeIds: Set<ObjectId> = java.util.Collections.unmodifiableSet(erasedStrokeIds)
+data class MultiFingerUndoRedo(
+val isRedo: Boolean,
+val fingerCount: Int
+data class Navigation(
+val deltaDoc: DocPoint
+data class SystemIntercept(
+val reason: String
+sealed interface GestureDecision {
+data class ExecuteShape(val proposal: GestureProposal.ShapeHold) : GestureDecision
+data class ExecuteLassoSelection(val proposal: GestureProposal.CircleToLasso) : GestureDecision
+data class ExecuteScribbleErase(val proposal: GestureProposal.ScribbleErase) : GestureDecision
+data class ExecuteUndoRedo(val proposal: GestureProposal.MultiFingerUndoRedo) : GestureDecision
+data class ExecuteNavigation(val proposal: GestureProposal.Navigation) : GestureDecision
+data class ConsumeAsSystem(val proposal: GestureProposal.SystemIntercept) : GestureDecision
 data class StylusInputPolicy(
 val stylusOnlyDrawing: Boolean = false,
 val palmRejectionEnabled: Boolean = true,
@@ -249,6 +300,10 @@ val isLayerLocked: Boolean = false,
 val camera: CameraTransform = CameraTransform(),
 val brush: BrushSpec = BrushSpec(),
 val policy: StylusInputPolicy = StylusInputPolicy(),
+val gestureSettings: GestureSettings = GestureSettings(),
+val activeTool: ActiveToolKind = ActiveToolKind.PEN,
+val hasActiveOperation: Boolean = false,
+val isSystemGestureIntercepted: Boolean = false,
 val maxResidentWindowBytes: Long = MemoryCategory.DRAFT_STROKE_WINDOW.defaultCapBytes,
 val maxSamplesPerResidentChunk: Int = 2048
 data class InkOutput(
@@ -262,6 +317,8 @@ val hoverOverlay: EphemeralOverlayItem.HoverCursor? = null,
 val navigationDeltaDoc: DocPoint? = null,
 val commitPlan: EditPlan? = null,
 val spooledChunkRefs: List<StagedChunkRef> = emptyList(),
+val gestureDecision: GestureDecision? = null,
+val holdDurationMs: Long = 0L,
 val residentWindowBytes: Long = 0L,
 val residentSampleCount: Int = 0,
 val totalRealSamplesIngested: Int = 0
@@ -784,6 +841,111 @@ val targetIds: Set<ObjectId>,
 val deltaTransform: AffineTransform2D,
 val previewBounds: DocRect
 val frozenTargetIds: Set<ObjectId> = java.util.Set.copyOf(targetIds)
+data class StrokeData(
+val origin: DocPoint,
+val samples: List<StrokeSamplePoint>,
+val brushKind: BrushKind = BrushKind.BALL,
+val baseWidthPt: Double = 2.0,
+val colorArgb: Int = 0xFF000000.toInt(),
+val holdDurationMs: Long = 0L,
+val isClosedLoop: Boolean = false
+val frozenSamples: List<StrokeSamplePoint> = java.util.List.copyOf(samples)
+val points: List<DocPoint>
+data class RecognitionConfig(
+val drawAndHoldEnabled: Boolean = true,
+val scribbleToEraseEnabled: Boolean = true,
+val circleToLassoEnabled: Boolean = true,
+val snapToOtherShapesEnabled: Boolean = true,
+val ignoreHoldRequirement: Boolean = false,
+val holdThresholdMs: Long = 350L,
+val circleReholdThresholdMs: Long = 300L,
+val circleReholdWindowMs: Long = 1500L,
+val circleReholdLineTolerancePt: Double = 14.0,
+val sensitivity: Float = 0.5f,
+val maxLineFitRmsRatio: Double = 0.045,
+val closureDistanceRatio: Double = 0.22,
+val minShapeExtentPt: Double = 12.0,
+val scribbleMinReversals: Int = 3,
+val snapToShapeTolerancePt: Double = 12.0
+fun defaults(): RecognitionConfig = RecognitionConfig()
+sealed interface ShapeCandidate {
+data class Recognized(
+val shapeType: ShapeType,
+val payload: ShapePayload,
+val bounds: DocRect,
+val confidence: Double,
+val snappedToTargetId: ObjectId? = null
+data class AmbiguousKeepOriginal(
+val reason: String
+data class Rejected(
+val reason: String
+enum class GridKind {
+data class GridSpec(
+val kind: GridKind = GridKind.BLANK,
+val spacingPt: Double = 24.0,
+val secondarySpacingPt: Double = 24.0,
+val colorArgb: Int = 0xFFCBD5E1.toInt(),
+val lineWidthPt: Double = 0.5,
+val isVisible: Boolean = true,
+val snapEnabled: Boolean = false,
+val snapTolerancePt: Double = 6.0
+enum class RulerUnit {
+enum class RulerEdge {
+data class RulerOverlayState(
+val isVisible: Boolean = false,
+val centerDoc: DocPoint = DocPoint(200.0, 200.0),
+val angleDegrees: Double = 0.0,
+val lengthPt: Double = 400.0,
+val thicknessPt: Double = 40.0,
+val unit: RulerUnit = RulerUnit.CENTIMETERS,
+val hideDigits: Boolean = false,
+val snapTolerancePt: Double = 18.0
+data class ProtractorOverlayState(
+val isVisible: Boolean = false,
+val centerDoc: DocPoint = DocPoint(200.0, 200.0),
+val radiusPt: Double = 90.0,
+val baseAngleDegrees: Double = 0.0,
+val startRayDegrees: Double = 0.0,
+val endRayDegrees: Double = 90.0,
+val snapTolerancePt: Double = 18.0,
+val angleSnapStepDegrees: Double = 15.0
+enum class GuideOrientation {
+data class GuideSpec(
+val id: String,
+val orientation: GuideOrientation,
+val positionPt: DocPoint,
+val angleDegrees: Double = when (orientation) {
+val snapTolerancePt: Double = 8.0
+enum class AlignmentGuideKind {
+data class AlignmentGuideLine(
+val kind: AlignmentGuideKind,
+val coordinatePt: Double,
+val isDashedCenterLine: Boolean,
+val referenceObjectId: ObjectId
+data class SnapConfig(
+val grid: GridSpec = GridSpec(),
+val ruler: RulerOverlayState = RulerOverlayState(),
+val protractor: ProtractorOverlayState = ProtractorOverlayState(),
+val guides: List<GuideSpec> = emptyList(),
+val angleSnapEnabled: Boolean = true,
+val angleSnapStepDegrees: Double = 15.0,
+val angleSnapToleranceDegrees: Double = 4.0,
+val alignObjectsEnabled: Boolean = true,
+val alignObjectsTolerancePt: Double = 6.0
+val frozenGuides: List<GuideSpec> = java.util.List.copyOf(guides)
+data class SnappedPointResult(
+val point: DocPoint,
+val snappedToRulerEdge: RulerEdge? = null,
+val snappedToProtractorArc: Boolean = false,
+val snappedToGuideId: String? = null,
+val snappedToGrid: Boolean = false,
+val rulerMeasurementUnits: Double? = null
+data class ObjectAlignmentResult(
+val snappedBounds: DocRect,
+val deltaX: Double,
+val deltaY: Double,
+val activeGuides: List<AlignmentGuideLine> = emptyList()
+val frozenActiveGuides: List<AlignmentGuideLine> = java.util.List.copyOf(activeGuides)
 data class PlanContext(
 val activeSpaceId: SpaceId = SpaceId("space-1"),
 val activePageId: PageId = PageId("page-1"),
@@ -791,7 +953,9 @@ val activeLayerId: LayerId = LayerId("layer-1"),
 val enteredGroupId: ObjectId? = null,
 val gestureId: GestureId = GestureId("gesture-obj-1"),
 val geometryPort: GeometryPort? = null,
-val limits: Limits = Limits()
+val limits: Limits = Limits(),
+val recognitionConfig: RecognitionConfig = RecognitionConfig(),
+val snapConfig: SnapConfig = SnapConfig()
 sealed interface ObjectAction {
 data class Move(
 val targets: Set<ObjectId>,
@@ -852,6 +1016,62 @@ val bundle: ClipboardBundle,
 val targetCenter: DocPoint? = null,
 val targetLayerId: LayerId? = null,
 val idPrefix: String = "paste"
+sealed interface ShapeAction : ObjectAction {
+data class CreateShape(
+val objectId: ObjectId,
+val payload: ShapePayload,
+val bounds: DocRect,
+val replaceStrokeId: ObjectId? = null
+data class UpdateShapeVertices(
+val targetId: ObjectId,
+val vertices: List<DocPoint>,
+val controlPoints: List<DocPoint> = emptyList()
+val frozenVertices: List<DocPoint> = java.util.List.copyOf(vertices)
+val frozenControlPoints: List<DocPoint> = java.util.List.copyOf(controlPoints)
+data class UpdateShapeAppearance(
+val targetId: ObjectId,
+val strokeColor: Int? = null,
+val fillColor: Int? = null,
+val clearFill: Boolean = false,
+val strokeWidthPt: Double? = null,
+val cornerRadiusPt: Double? = null,
+val startArrowhead: ArrowheadStyle? = null,
+val endArrowhead: ArrowheadStyle? = null,
+val shapeType: ShapeType? = null
+data class CreateConnector(
+val connectorId: ObjectId,
+val sourceId: ObjectId,
+val targetId: ObjectId,
+val sourceAnchor: ConnectorAnchor = ConnectorAnchor(AnchorSide.RIGHT, 0.5),
+val targetAnchor: ConnectorAnchor = ConnectorAnchor(AnchorSide.LEFT, 0.5),
+val controlPoints: List<DocPoint> = emptyList(),
+val strokeColor: Int = 0xFF000000.toInt(),
+val strokeWidthPt: Double = 1.5,
+val isDirected: Boolean = true,
+val startArrowhead: ArrowheadStyle = ArrowheadStyle.NONE,
+val endArrowhead: ArrowheadStyle = ArrowheadStyle.OPEN_ARROW,
+val danglingPolicy: DanglingEndpointPolicy = DanglingEndpointPolicy.DELETE_CONNECTOR
+val frozenControlPoints: List<DocPoint> = java.util.List.copyOf(controlPoints)
+data class UpdateConnectorEndpoints(
+val connectorId: ObjectId,
+val sourceId: ObjectId? = null,
+val targetId: ObjectId? = null,
+val sourceAnchor: ConnectorAnchor? = null,
+val targetAnchor: ConnectorAnchor? = null,
+val controlPoints: List<DocPoint>? = null,
+val danglingPolicy: DanglingEndpointPolicy? = null
+val frozenControlPoints: List<DocPoint>? = controlPoints?.let { java.util.List.copyOf(it) }
+data class QuickDiagramCreateAndConnect(
+val sourceId: ObjectId,
+val newShapeId: ObjectId,
+val newShapePayload: ShapePayload,
+val newShapeBounds: DocRect,
+val connectorId: ObjectId,
+val sourceAnchor: ConnectorAnchor = ConnectorAnchor(AnchorSide.RIGHT, 0.5),
+val targetAnchor: ConnectorAnchor = ConnectorAnchor(AnchorSide.LEFT, 0.5),
+val strokeColor: Int = 0xFF000000.toInt(),
+val strokeWidthPt: Double = 1.5,
+val danglingPolicy: DanglingEndpointPolicy = DanglingEndpointPolicy.DELETE_CONNECTOR
 sealed interface Outcome<out T, out E> {
 val isSuccess: Boolean
 val isFailure: Boolean
@@ -873,18 +1093,46 @@ val relY: Float,
 val pressure: Float = 0.5f,
 val tilt: Float = 0.0f,
 val timeDeltaMs: Int = 0
+enum class ArrowheadStyle {
 data class ShapePayload(
 val shapeType: ShapeType,
 val strokeColor: Int,
 val fillColor: Int? = null,
-val strokeWidthPt: Double = 1.0
+val strokeWidthPt: Double = 1.0,
+val cornerRadiusPt: Double = 0.0,
+val vertices: List<DocPoint> = emptyList(),
+val controlPoints: List<DocPoint> = emptyList(),
+val startArrowhead: ArrowheadStyle = ArrowheadStyle.NONE,
+val endArrowhead: ArrowheadStyle = if (shapeType == ShapeType.Arrow) ArrowheadStyle.OPEN_ARROW else ArrowheadStyle.NONE,
+val startAngleRad: Double = 0.0,
+val sweepAngleRad: Double = 0.0
+val frozenVertices: List<DocPoint> = java.util.List.copyOf(vertices)
+val frozenControlPoints: List<DocPoint> = java.util.List.copyOf(controlPoints)
 enum class ShapeType {
+enum class AnchorSide {
+data class ConnectorAnchor(
+val side: AnchorSide = AnchorSide.CENTER,
+val fraction: Double = 0.5,
+val offsetPt: DocPoint = DocPoint(0.0, 0.0)
+fun resolveWorldPoint(targetBounds: DocRect): DocPoint {
+val f = fraction.coerceIn(0.0, 1.0)
+val base = when (side) {
+enum class DanglingEndpointPolicy {
 data class ConnectorPayload(
 val sourceId: ObjectId,
 val targetId: ObjectId,
 val strokeColor: Int,
 val strokeWidthPt: Double = 1.0,
-val isDirected: Boolean = true
+val isDirected: Boolean = true,
+val sourceAnchor: ConnectorAnchor = ConnectorAnchor(AnchorSide.RIGHT, 0.5),
+val targetAnchor: ConnectorAnchor = ConnectorAnchor(AnchorSide.LEFT, 0.5),
+val controlPoints: List<DocPoint> = emptyList(),
+val startArrowhead: ArrowheadStyle = ArrowheadStyle.NONE,
+val endArrowhead: ArrowheadStyle = if (isDirected) ArrowheadStyle.OPEN_ARROW else ArrowheadStyle.NONE,
+val danglingPolicy: DanglingEndpointPolicy = DanglingEndpointPolicy.DELETE_CONNECTOR,
+val resolvedStartPoint: DocPoint? = null,
+val resolvedEndPoint: DocPoint? = null
+val frozenControlPoints: List<DocPoint> = java.util.List.copyOf(controlPoints)
 data class TextPayload(
 val text: String,
 val fontSizePt: Double = 12.0,
@@ -1109,6 +1357,13 @@ val relativePoints: List<DocPoint>,
 val colorArgb: Int = 0xFFFF1744.toInt(),
 val widthPt: Double = 3.0
 val frozenPoints: List<DocPoint> = java.util.List.copyOf(relativePoints)
+data class RulerOverlay(
+val state: inkspace.core.objects.RulerOverlayState
+data class ProtractorOverlay(
+val state: inkspace.core.objects.ProtractorOverlayState
+data class AlignmentGuidesOverlay(
+val guides: List<inkspace.core.objects.AlignmentGuideLine>
+val frozenGuides: List<inkspace.core.objects.AlignmentGuideLine> = java.util.List.copyOf(guides)
 data class Scene(
 val snapshot: DocumentSnapshot,
 val activeSpaceId: SpaceId = SpaceId("space-1"),

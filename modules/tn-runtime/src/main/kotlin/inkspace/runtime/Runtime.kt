@@ -7,6 +7,7 @@ import inkspace.core.error.SubmitError
 import inkspace.core.id.DocumentId
 import inkspace.core.id.GestureId
 import inkspace.core.id.LayerId
+import inkspace.core.id.ObjectId
 import inkspace.core.id.PageId
 import inkspace.core.id.Revision
 import inkspace.core.id.SessionEpoch
@@ -14,8 +15,11 @@ import inkspace.core.id.SpaceId
 import inkspace.core.id.TransactionId
 import inkspace.core.ink.BrushSpec
 import inkspace.core.ink.EffectiveInkToolMode
+import inkspace.core.ink.GestureDecision
+import inkspace.core.ink.GestureSettings
 import inkspace.core.ink.InputBatch
 import inkspace.core.ink.InputContext
+import inkspace.core.ink.MultiTapGestureEvent
 import inkspace.core.ink.StylusInputPolicy
 import inkspace.core.model.DocumentSnapshot
 import inkspace.core.model.DocumentState
@@ -26,10 +30,16 @@ import inkspace.core.mutation.validatePlan
 import inkspace.core.objects.ClipboardBundle
 import inkspace.core.objects.ObjectAction
 import inkspace.core.objects.PlanContext
+import inkspace.core.objects.ProtractorOverlayState
+import inkspace.core.objects.RulerOverlayState
 import inkspace.core.objects.SelectionQuery
 import inkspace.core.objects.SelectionSet
+import inkspace.core.objects.SnapConfig
+import inkspace.core.objects.StrokeData
 import inkspace.core.objects.TransferId
 import inkspace.core.outcome.Outcome
+import inkspace.core.payload.ShapePayload
+import inkspace.core.payload.StrokePayload
 import inkspace.core.ports.DurableAck
 import inkspace.core.ports.GeometryPort
 import inkspace.core.ports.RequestId
@@ -48,10 +58,14 @@ import inkspace.core.runtime.RuntimeConfig
 import inkspace.core.runtime.SaveStatus
 import inkspace.core.runtime.SaveStatusKind
 import inkspace.core.runtime.ViewportState
+import inkspace.core.unit.DocPoint
+import inkspace.core.unit.DocRect
+import inkspace.ink.GestureArbiter
 import inkspace.ink.InkEngine
 import inkspace.ink.InkGeometryPort
 import inkspace.objects.ObjectPlanner
 import inkspace.objects.SelectionEngine
+import inkspace.objects.ShapeRecognizer
 import inkspace.store.DocumentStore
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
@@ -74,6 +88,10 @@ class Runtime private constructor(
     val ports: PlatformPorts
 ) : AppGateway {
 
+    init {
+        GestureArbiter.shapeRecognizer = ShapeRecognizer::recognize
+    }
+
     private class SessionContext(
         val session: SessionKey,
         val state: DocumentState,
@@ -91,6 +109,10 @@ class Runtime private constructor(
         val inkEngine = InkEngine()
         var activeBrush: BrushSpec = BrushSpec()
         var inputPolicy: StylusInputPolicy = StylusInputPolicy()
+        var gestureSettings: GestureSettings = GestureSettings()
+        var snapConfig: SnapConfig = SnapConfig()
+        var rulerOverlay: RulerOverlayState? = null
+        var protractorOverlay: ProtractorOverlayState? = null
         val activeDraftStrokes = ConcurrentHashMap<Int, DraftStrokeSceneItem>()
         val activeEphemeralOverlays = ConcurrentHashMap<Int, EphemeralOverlayItem>()
         var currentSelectionSet: SelectionSet = SelectionSet()
@@ -371,7 +393,8 @@ class Runtime private constructor(
                 enteredGroupId = ctx.currentSelectionSet.enteredGroupId,
                 gestureId = gestureId,
                 geometryPort = defaultGeometryPort,
-                limits = config.limits
+                limits = config.limits,
+                snapConfig = ctx.snapConfig
             )
             ObjectPlanner.plan(ctx.state, action, planCtx)
         }.get(5, TimeUnit.SECONDS)
@@ -391,6 +414,80 @@ class Runtime private constructor(
             is Outcome.Failure -> Outcome.Failure(FeatureError.InvalidParameters(submitRes.error.toString()))
             is Outcome.Success -> submitRes
         }
+    }
+
+    fun submitMultiTap(
+        session: SessionKey,
+        event: MultiTapGestureEvent
+    ): Outcome<GestureDecision, FeatureError> {
+        return engineExecutor.submit<Outcome<GestureDecision, FeatureError>> {
+            val ctx = activeSessions[session]
+                ?: return@submit Outcome.Failure(FeatureError.EntityNotFound(session.document.value))
+            val decision = GestureArbiter.arbitrateMultiTap(
+                event = event,
+                settings = ctx.gestureSettings,
+                hasActiveOperation = !ctx.currentSelectionSet.isEmpty,
+                isSystemIntercepted = false
+            )
+            if (decision is GestureDecision.ExecuteUndoRedo) {
+                executeUndoRedoInternal(session, isUndo = !decision.proposal.isRedo)
+            }
+            Outcome.Success(decision)
+        }.get(5, TimeUnit.SECONDS)
+    }
+
+    fun setGestureSettings(session: SessionKey, settings: GestureSettings) {
+        engineExecutor.execute {
+            activeSessions[session]?.let { it.gestureSettings = settings }
+        }
+    }
+
+    fun getGestureSettings(session: SessionKey): GestureSettings {
+        return engineExecutor.submit<GestureSettings> {
+            activeSessions[session]?.gestureSettings ?: GestureSettings()
+        }.get(5, TimeUnit.SECONDS)
+    }
+
+    fun setSnapConfig(session: SessionKey, snapConfig: SnapConfig) {
+        engineExecutor.execute {
+            activeSessions[session]?.let { it.snapConfig = snapConfig }
+        }
+    }
+
+    fun getSnapConfig(session: SessionKey): SnapConfig {
+        return engineExecutor.submit<SnapConfig> {
+            activeSessions[session]?.snapConfig ?: SnapConfig()
+        }.get(5, TimeUnit.SECONDS)
+    }
+
+    fun setRulerOverlay(session: SessionKey, overlay: RulerOverlayState?) {
+        engineExecutor.execute {
+            activeSessions[session]?.let { it.rulerOverlay = overlay }
+        }
+    }
+
+    fun getRulerOverlay(session: SessionKey): RulerOverlayState? {
+        return engineExecutor.submit<RulerOverlayState?> {
+            activeSessions[session]?.rulerOverlay
+        }.get(5, TimeUnit.SECONDS)
+    }
+
+    fun setProtractorOverlay(session: SessionKey, overlay: ProtractorOverlayState?) {
+        engineExecutor.execute {
+            activeSessions[session]?.let { it.protractorOverlay = overlay }
+        }
+    }
+
+    fun getProtractorOverlay(session: SessionKey): ProtractorOverlayState? {
+        return engineExecutor.submit<ProtractorOverlayState?> {
+            activeSessions[session]?.protractorOverlay
+        }.get(5, TimeUnit.SECONDS)
+    }
+
+    fun currentSelectionSet(session: SessionKey): SelectionSet? {
+        return engineExecutor.submit<SelectionSet?> {
+            activeSessions[session]?.currentSelectionSet
+        }.get(5, TimeUnit.SECONDS)
     }
 
     fun copySelectionToClipboard(
@@ -621,7 +718,8 @@ class Runtime private constructor(
             isLayerLocked = isLayerLocked,
             camera = ctx.viewport.camera,
             brush = ctx.activeBrush,
-            policy = ctx.inputPolicy
+            policy = ctx.inputPolicy,
+            gestureSettings = ctx.gestureSettings
         )
 
         val ingestRes = ctx.inkEngine.ingest(batch, inputCtx)
@@ -700,6 +798,130 @@ class Runtime private constructor(
         )
 
         val commitPlan = out.commitPlan
+
+        var finalDecision = out.gestureDecision
+        if (batch.action == InputActionKind.UP && (finalDecision == null || finalDecision is GestureDecision.FallbackToInk)) {
+            val allObjs = ctx.state.snapshot().directory.allResidentObjects()
+            val candidateStrokes = allObjs
+                .filter { it.payload is StrokePayload }
+                .map { it.id to it.bounds }
+            val recentLoop = allObjs
+                .lastOrNull { (it.payload as? StrokePayload)?.samples?.isNotEmpty() == true }
+                ?.let { it.id to it.bounds }
+            val strokeData = (commitPlan?.mutations?.firstOrNull() as? inkspace.core.mutation.InsertObject)?.let { ins ->
+                (ins.payload as? StrokePayload)?.let { sp ->
+                    StrokeData(
+                        origin = sp.origin,
+                        samples = sp.samples,
+                        brushKind = ctx.activeBrush.kind,
+                        baseWidthPt = sp.baseWidthPt,
+                        colorArgb = sp.color,
+                        holdDurationMs = out.holdDurationMs
+                    )
+                }
+            }
+            if (strokeData != null) {
+                val evaluated = GestureArbiter.arbitrate(
+                    stroke = strokeData,
+                    ctx = inputCtx,
+                    strokeId = ObjectId("stroke-${batch.sequenceNumber}"),
+                    candidateErasedStrokes = candidateStrokes,
+                    recentClosedLoop = recentLoop
+                )
+                if (evaluated !is GestureDecision.FallbackToInk && evaluated !is GestureDecision.Ignored) {
+                    finalDecision = evaluated
+                }
+            }
+        }
+
+        if (finalDecision is GestureDecision.ExecuteShape) {
+            val prop = finalDecision.proposal
+            val cand = prop.shapeCandidate
+            val shapeId = prop.strokeId
+            val shapeAction = ObjectAction.ShapeAction.CreateShape(
+                objectId = shapeId,
+                payload = cand.payload,
+                bounds = cand.bounds
+            )
+            val planCtx = PlanContext(
+                activeSpaceId = activeSpace,
+                activePageId = activePage,
+                activeLayerId = activeLayer,
+                gestureId = GestureId("shape-gesture-${shapeId.value}"),
+                geometryPort = defaultGeometryPort,
+                limits = config.limits
+            )
+            val shapePlanOut = ObjectPlanner.plan(ctx.state, shapeAction, planCtx)
+            if (shapePlanOut is Outcome.Success) {
+                val estBytes = 512L
+                val reserveRes = queues.tryReservePersistAndAck(batch.session, estBytes)
+                if (reserveRes is Outcome.Success) {
+                    ctx.inFlightReservations[ctx.appliedRevision + 1L] = reserveRes.value
+                    executeEditInternal(
+                        AppCommand.SubmitEdit(
+                            session = batch.session,
+                            plan = shapePlanOut.value,
+                            estimatedBytes = estBytes
+                        ),
+                        null
+                    )
+                }
+            }
+            return
+        }
+
+        if (finalDecision is GestureDecision.ExecuteScribbleErase) {
+            val erasedIds = finalDecision.proposal.erasedStrokeIds
+            if (erasedIds.isNotEmpty()) {
+                val deleteAction = ObjectAction.Delete(erasedIds)
+                val planCtx = PlanContext(
+                    activeSpaceId = activeSpace,
+                    activePageId = activePage,
+                    activeLayerId = activeLayer,
+                    gestureId = GestureId("scribble-erase-${batch.sequenceNumber}"),
+                    geometryPort = defaultGeometryPort,
+                    limits = config.limits
+                )
+                val deletePlanOut = ObjectPlanner.plan(ctx.state, deleteAction, planCtx)
+                if (deletePlanOut is Outcome.Success) {
+                    val estBytes = 512L
+                    val reserveRes = queues.tryReservePersistAndAck(batch.session, estBytes)
+                    if (reserveRes is Outcome.Success) {
+                        ctx.inFlightReservations[ctx.appliedRevision + 1L] = reserveRes.value
+                        executeEditInternal(
+                            AppCommand.SubmitEdit(
+                                session = batch.session,
+                                plan = deletePlanOut.value,
+                                estimatedBytes = estBytes
+                            ),
+                            null
+                        )
+                    }
+                }
+            }
+            return
+        }
+
+        if (finalDecision is GestureDecision.ExecuteLassoSelection) {
+            val enclosed = finalDecision.proposal.enclosedBounds
+            val query = SelectionQuery(
+                spaceId = activeSpace,
+                mode = inkspace.core.objects.SelectionMode.RECTANGLE,
+                rule = inkspace.core.objects.SelectionRule.INTERSECTS,
+                rect = enclosed
+            )
+            val selOut = SelectionEngine.select(ctx.state, ctx.currentSelectionSet, query, defaultGeometryPort)
+            if (selOut is Outcome.Success) {
+                ctx.currentSelectionSet = selOut.value
+            }
+            return
+        }
+
+        if (finalDecision is GestureDecision.ExecuteUndoRedo) {
+            executeUndoRedoInternal(batch.session, isUndo = !finalDecision.proposal.isRedo)
+            return
+        }
+
         if (commitPlan != null) {
             val estBytes = batch.byteSize.toLong().coerceAtLeast(256L)
             val reserveRes = queues.tryReservePersistAndAck(batch.session, estBytes)

@@ -175,8 +175,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f08",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-objects/src/test/kotlin/inkspace/objects/F08ShapeAndConnectorTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F08/report.md"
     },
     {
@@ -190,8 +190,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f08",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-objects/src/test/kotlin/inkspace/objects/F08RulerProtractorAndSnapTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F08/report.md"
     },
     {
@@ -205,8 +205,8 @@
         "G2"
       ],
       "required_device_class": "all_profiles",
-      "scenario_or_test_path": "modules/tn-f08",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-ink/src/test/kotlin/inkspace/ink/F08GestureArbiterAndCorpusTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F08/report.md"
     },
     {
@@ -1059,8 +1059,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f08",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F08RuntimeShapesAndGesturesIntegrationTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F08/report.md"
     },
     {
@@ -1075,8 +1075,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f08",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F08RuntimeShapesAndGesturesIntegrationTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F08/report.md"
     },
     {
@@ -1091,8 +1091,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f08",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F08RuntimeShapesAndGesturesIntegrationTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F08/report.md"
     },
     {
@@ -1107,8 +1107,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f08",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F08RuntimeShapesAndGesturesIntegrationTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F08/report.md"
     },
     {
@@ -1123,8 +1123,8 @@
         "G2"
       ],
       "required_device_class": "tablet_portrait_landscape_split",
-      "scenario_or_test_path": "modules/tn-f08",
-      "status": "planned",
+      "scenario_or_test_path": "modules/tn-runtime/src/test/kotlin/inkspace/runtime/F08RuntimeShapesAndGesturesIntegrationTest.kt",
+      "status": "verified",
       "evidence_path": "docs/evidence/F08/report.md"
     },
     {

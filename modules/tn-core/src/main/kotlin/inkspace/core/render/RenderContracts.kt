@@ -92,6 +92,20 @@ sealed interface EphemeralOverlayItem {
     ) : EphemeralOverlayItem {
         val frozenPoints: List<DocPoint> = java.util.List.copyOf(relativePoints)
     }
+
+    data class RulerOverlay(
+        val state: inkspace.core.objects.RulerOverlayState
+    ) : EphemeralOverlayItem
+
+    data class ProtractorOverlay(
+        val state: inkspace.core.objects.ProtractorOverlayState
+    ) : EphemeralOverlayItem
+
+    data class AlignmentGuidesOverlay(
+        val guides: List<inkspace.core.objects.AlignmentGuideLine>
+    ) : EphemeralOverlayItem {
+        val frozenGuides: List<inkspace.core.objects.AlignmentGuideLine> = java.util.List.copyOf(guides)
+    }
 }
 
 /**

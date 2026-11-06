@@ -41,15 +41,36 @@ data class StrokeSamplePoint(
 }
 
 @Serializable
+enum class ArrowheadStyle {
+    NONE,
+    OPEN_ARROW,
+    CLOSED_TRIANGLE,
+    DIAMOND,
+    CIRCLE
+}
+
+@Serializable
 @SerialName("shape")
 data class ShapePayload(
     val shapeType: ShapeType,
     val strokeColor: Int,
     val fillColor: Int? = null,
-    val strokeWidthPt: Double = 1.0
+    val strokeWidthPt: Double = 1.0,
+    val cornerRadiusPt: Double = 0.0,
+    val vertices: List<DocPoint> = emptyList(),
+    val controlPoints: List<DocPoint> = emptyList(),
+    val startArrowhead: ArrowheadStyle = ArrowheadStyle.NONE,
+    val endArrowhead: ArrowheadStyle = if (shapeType == ShapeType.Arrow) ArrowheadStyle.OPEN_ARROW else ArrowheadStyle.NONE,
+    val startAngleRad: Double = 0.0,
+    val sweepAngleRad: Double = 0.0
 ) : ObjectPayload {
+    val frozenVertices: List<DocPoint> = java.util.List.copyOf(vertices)
+    val frozenControlPoints: List<DocPoint> = java.util.List.copyOf(controlPoints)
+
     init {
         require(strokeWidthPt > 0.0 && strokeWidthPt.isFinite()) { "strokeWidthPt must be positive finite" }
+        require(cornerRadiusPt >= 0.0 && cornerRadiusPt.isFinite()) { "cornerRadiusPt must be non-negative finite" }
+        require(startAngleRad.isFinite() && sweepAngleRad.isFinite()) { "Arc angles must be finite" }
     }
 }
 
@@ -57,11 +78,66 @@ data class ShapePayload(
 enum class ShapeType {
     Rectangle,
     RoundedRectangle,
+    Square,
+    Circle,
     Ellipse,
     Line,
     Arrow,
     Triangle,
-    Polygon
+    Polygon,
+    Polyline,
+    Curve,
+    Arc
+}
+
+@Serializable
+enum class AnchorSide {
+    TOP,
+    RIGHT,
+    BOTTOM,
+    LEFT,
+    CENTER,
+    CUSTOM
+}
+
+@Serializable
+data class ConnectorAnchor(
+    val side: AnchorSide = AnchorSide.CENTER,
+    val fraction: Double = 0.5,
+    val offsetPt: DocPoint = DocPoint(0.0, 0.0)
+) {
+    init {
+        require(fraction.isFinite() && fraction in 0.0..1.0) { "Anchor fraction must be in [0, 1]: $fraction" }
+    }
+
+    fun resolveWorldPoint(targetBounds: DocRect): DocPoint {
+        val f = fraction.coerceIn(0.0, 1.0)
+        val base = when (side) {
+            AnchorSide.TOP -> DocPoint(targetBounds.left + targetBounds.width * f, targetBounds.top)
+            AnchorSide.BOTTOM -> DocPoint(targetBounds.left + targetBounds.width * f, targetBounds.bottom)
+            AnchorSide.LEFT -> DocPoint(targetBounds.left, targetBounds.top + targetBounds.height * f)
+            AnchorSide.RIGHT -> DocPoint(targetBounds.right, targetBounds.top + targetBounds.height * f)
+            AnchorSide.CENTER -> DocPoint(
+                (targetBounds.left + targetBounds.right) * 0.5,
+                (targetBounds.top + targetBounds.bottom) * 0.5
+            )
+            AnchorSide.CUSTOM -> DocPoint(
+                (targetBounds.left + targetBounds.right) * 0.5 + offsetPt.x,
+                (targetBounds.top + targetBounds.bottom) * 0.5 + offsetPt.y
+            )
+        }
+        return if (side == AnchorSide.CUSTOM) {
+            base
+        } else {
+            DocPoint(base.x + offsetPt.x, base.y + offsetPt.y)
+        }
+    }
+}
+
+@Serializable
+enum class DanglingEndpointPolicy {
+    DELETE_CONNECTOR,
+    DETACH_TO_POINT
 }
 
 @Serializable
@@ -71,8 +147,22 @@ data class ConnectorPayload(
     val targetId: ObjectId,
     val strokeColor: Int,
     val strokeWidthPt: Double = 1.0,
-    val isDirected: Boolean = true
-) : ObjectPayload
+    val isDirected: Boolean = true,
+    val sourceAnchor: ConnectorAnchor = ConnectorAnchor(AnchorSide.RIGHT, 0.5),
+    val targetAnchor: ConnectorAnchor = ConnectorAnchor(AnchorSide.LEFT, 0.5),
+    val controlPoints: List<DocPoint> = emptyList(),
+    val startArrowhead: ArrowheadStyle = ArrowheadStyle.NONE,
+    val endArrowhead: ArrowheadStyle = if (isDirected) ArrowheadStyle.OPEN_ARROW else ArrowheadStyle.NONE,
+    val danglingPolicy: DanglingEndpointPolicy = DanglingEndpointPolicy.DELETE_CONNECTOR,
+    val resolvedStartPoint: DocPoint? = null,
+    val resolvedEndPoint: DocPoint? = null
+) : ObjectPayload {
+    val frozenControlPoints: List<DocPoint> = java.util.List.copyOf(controlPoints)
+
+    init {
+        require(strokeWidthPt > 0.0 && strokeWidthPt.isFinite()) { "strokeWidthPt must be positive finite" }
+    }
+}
 
 @Serializable
 @SerialName("text")

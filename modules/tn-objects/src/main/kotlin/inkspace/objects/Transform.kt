@@ -144,6 +144,9 @@ object TransformPlanner {
             }
         }
 
+        // 4. Update any connected connectors following moved targets
+        updateConnectedConnectors(read, updatedBoundsMap, preconditions, mutations)
+
         return Outcome.Success(
             EditPlan(
                 base = read.version,
@@ -283,6 +286,9 @@ object TransformPlanner {
             }
         }
 
+        // Update any connected connectors following transformed targets
+        updateConnectedConnectors(read, updatedBoundsMap, preconditions, mutations)
+
         return Outcome.Success(
             EditPlan(
                 base = read.version,
@@ -292,6 +298,46 @@ object TransformPlanner {
                 label = label
             )
         )
+    }
+
+    private fun updateConnectedConnectors(
+        read: DocumentRead,
+        updatedBoundsMap: Map<ObjectId, DocRect>,
+        preconditions: ArrayList<Precondition>,
+        mutations: ArrayList<Mutation>
+    ) {
+        val allIds = read.queryBounds(DocRect(-1e8, -1e8, 1e8, 1e8))
+        for (id in allIds) {
+            if (id in updatedBoundsMap) continue
+            val obj = read.getObject(id) ?: continue
+            val c = obj.payload as? ConnectorPayload ?: continue
+            val srcBounds = updatedBoundsMap[c.sourceId] ?: read.getObject(c.sourceId)?.bounds
+            val dstBounds = updatedBoundsMap[c.targetId] ?: read.getObject(c.targetId)?.bounds
+            if (srcBounds != null && dstBounds != null &&
+                (c.sourceId in updatedBoundsMap || c.targetId in updatedBoundsMap)
+            ) {
+                val newStart = c.sourceAnchor.resolveWorldPoint(srcBounds)
+                val newEnd = c.targetAnchor.resolveWorldPoint(dstBounds)
+                val minX = min(newStart.x, newEnd.x) - 4.0
+                val minY = min(newStart.y, newEnd.y) - 4.0
+                val maxX = max(newStart.x, newEnd.x) + 4.0
+                val maxY = max(newStart.y, newEnd.y) + 4.0
+                val newBounds = DocRect(minX, minY, maxX, maxY)
+                val newPayload = c.copy(
+                    resolvedStartPoint = newStart,
+                    resolvedEndPoint = newEnd
+                )
+                preconditions.add(Precondition(obj.id.value, obj.version))
+                mutations.add(
+                    UpdatePayload(
+                        id = obj.id,
+                        newPayload = newPayload,
+                        newBounds = newBounds,
+                        targetVersion = obj.version + 1L
+                    )
+                )
+            }
+        }
     }
 
     fun planApplyStyle(

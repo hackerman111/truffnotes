@@ -1,0 +1,34 @@
+{
+  "phase": "F08",
+  "seed": 20261105,
+  "summary": {
+    "total_positive_samples": 650,
+    "positive_recognized_samples": 634,
+    "true_positive_rate": 0.9754,
+    "total_negative_samples": 2200,
+    "negative_preserved_samples": 2200,
+    "false_positive_rate": 0.0,
+    "preservation_rate": 1.0,
+    "gating_status": "PASS"
+  },
+  "positive_breakdown": {
+    "Line": { "samples": 50, "recognized": 49, "accuracy": 0.98 },
+    "Arrow": { "samples": 50, "recognized": 48, "accuracy": 0.96 },
+    "Circle": { "samples": 60, "recognized": 59, "accuracy": 0.9833 },
+    "Ellipse": { "samples": 60, "recognized": 58, "accuracy": 0.9667 },
+    "Square": { "samples": 60, "recognized": 59, "accuracy": 0.9833 },
+    "Rectangle": { "samples": 60, "recognized": 58, "accuracy": 0.9667 },
+    "RoundedRectangle": { "samples": 60, "recognized": 57, "accuracy": 0.95 },
+    "Triangle": { "samples": 60, "recognized": 59, "accuracy": 0.9833 },
+    "Polygon": { "samples": 50, "recognized": 48, "accuracy": 0.96 },
+    "Polyline": { "samples": 50, "recognized": 49, "accuracy": 0.98 },
+    "Arc": { "samples": 50, "recognized": 50, "accuracy": 1.0 },
+    "Curve": { "samples": 40, "recognized": 40, "accuracy": 1.0 }
+  },
+  "negative_breakdown": {
+    "cursive_handwriting_loops": { "samples": 550, "false_positives": 0, "preservation_rate": 1.0 },
+    "math_symbols_and_equations": { "samples": 550, "false_positives": 0, "preservation_rate": 1.0 },
+    "freehand_shading_and_hatching": { "samples": 550, "false_positives": 0, "preservation_rate": 1.0 },
+    "small_dots_and_tiny_scribbles": { "samples": 550, "false_positives": 0, "preservation_rate": 1.0 }
+  }
+}

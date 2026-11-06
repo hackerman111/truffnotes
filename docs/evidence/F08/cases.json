@@ -1,0 +1,82 @@
+{
+  "phase": "F08",
+  "title": "Геометрические фигуры и автомат жестов (:tn-core, :tn-objects, :tn-ink, :tn-render, :tn-runtime)",
+  "seed": 20261105,
+  "requirements_verified": [
+    "R11",
+    "R12",
+    "R13",
+    "acceptance26",
+    "acceptance27",
+    "acceptance28",
+    "acceptance29",
+    "acceptance30"
+  ],
+  "requirements_contributed": [
+    "R31"
+  ],
+  "test_suites": [
+    {
+      "suite": "inkspace.objects.F08ShapeAndConnectorTest",
+      "cases": [
+        "testRecognizeStraightLineAndArrow",
+        "testRecognizeCircleAndEllipse",
+        "testRecognizeSquareRectangleAndRoundedRectangle",
+        "testRecognizeTriangleAndPolygon",
+        "testRecognizeOpenPolylineArcAndCurve",
+        "testSubThresholdHoldAndDisabledConfigReject",
+        "testAmbiguousHandwritingCorpusVerification",
+        "testShapePlannerCreateUpdateAppearanceAndVertices",
+        "testConnectorFollowingMovedAndScaledShapes",
+        "testConnectorFollowingRotatedSourceShape",
+        "testDeleteShapeWithDetachToPointPolicy",
+        "testDeleteShapeWithDeleteConnectorPolicyAndUndo",
+        "testQuickDiagramAtomicTransaction"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.objects.F08RulerProtractorAndSnapTest",
+      "cases": [
+        "testRulerTwoEdgeSnappingTopAndBottomEdge",
+        "testRulerCentimeterAndInchUnitConversions",
+        "testProtractorArcAndRayAngleSnapping",
+        "testGridSnappingAcrossAllSevenKinds",
+        "testAngleSnappingFifteenDegreeSteps",
+        "testObjectAlignmentGuidesDashedCenterAndSolidEdges",
+        "testOverlayTransformSharedViaCameraTransform"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.ink.F08GestureArbiterAndCorpusTest",
+      "cases": [
+        "testPriorityLevel1SystemIntercept",
+        "testPriorityLevel2ActiveOperation",
+        "testPriorityLevel3ExplicitTool",
+        "testPriorityLevel5aGeometricGesturesDisabledFallbackToInk",
+        "testPriorityLevel5bHoldToStraightenLine",
+        "testPriorityLevel5cHoldToCircle",
+        "testHoldSubThresholdFallsBackToInk",
+        "testScribbleToEraseOnPenBrushes",
+        "testCircleToLassoSelection",
+        "testMultiFingerTapUndoRedo",
+        "testSettingsResetToDefaults"
+      ],
+      "status": "PASS"
+    },
+    {
+      "suite": "inkspace.runtime.F08RuntimeShapesAndGesturesIntegrationTest",
+      "cases": [
+        "testAcceptance26HoldAfterStraightLineStraightensIt",
+        "testAcceptance27HoldAfterCircleConvertsToShape",
+        "testAcceptance28CircleLiftReholdSelectsEnclosedObjects",
+        "testAcceptance29ScribbleToEraseUndoneInSingleStep",
+        "testAcceptance30GeometricGesturesCanBeDisabled",
+        "testMultiFingerTapUndoRedoInRuntime",
+        "testRulerProtractorGridSnappingAndPersistence"
+      ],
+      "status": "PASS"
+    }
+  ]
+}
