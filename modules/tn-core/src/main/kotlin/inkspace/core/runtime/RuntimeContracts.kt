@@ -462,5 +462,6 @@ interface AppGateway {
     fun latestSnapshot(session: SessionKey): DocumentSnapshot? = null
     fun latestSaveStatus(session: SessionKey): SaveStatus? = null
     fun latestViewport(session: SessionKey): ViewportState? = null
+    fun activeSessionFor(documentId: String): SessionKey? = null
     fun acknowledgeError(error: AppEvent.ErrorEvent) {}
 }

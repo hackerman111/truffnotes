@@ -9,13 +9,13 @@
   "metrics": {
     "w2_freehand_lasso_1000_candidates_ms": {
       "budget_p95_ms": 8.0,
-      "p50_ms": 4.7849,
-      "p95_ms": 5.4094
+      "p50_ms": 3.7649,
+      "p95_ms": 4.4002
     },
     "w2_segment_eraser_1000_candidates_ms": {
       "budget_p95_ms": 8.0,
-      "p50_ms": 4.8621,
-      "p95_ms": 5.3168
+      "p50_ms": 4.1959,
+      "p95_ms": 4.9059
     }
   }
 }

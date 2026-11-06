@@ -20,7 +20,10 @@ import inkspace.core.payload.GroupPayload
 import inkspace.core.payload.ImagePayload
 import inkspace.core.payload.LinkAnchorPayload
 import inkspace.core.payload.ObjectPayload
+import inkspace.core.payload.ShapePayload
+import inkspace.core.payload.StickyPayload
 import inkspace.core.payload.StrokePayload
+import inkspace.core.payload.TapePayload
 import inkspace.core.payload.TextPayload
 import inkspace.core.read.DocumentRead
 import inkspace.core.read.ResidencyState
@@ -261,6 +264,10 @@ data class SceneObject(
             is StrokePayload -> 64 + payload.samples.size * 24
             is TextPayload -> 64 + payload.text.length * 2 + payload.runs.size * 24
             is GroupPayload -> 48 + payload.members.size * 16
+            is StickyPayload -> 64 + payload.content.length * 2 + (payload.richText?.let { 64 + it.text.length * 2 + it.runs.size * 24 } ?: 0) + payload.attachedIds.size * 16
+            is TapePayload -> 64 + payload.points.size * 16
+            is ShapePayload -> 64 + payload.vertices.size * 16 + payload.controlPoints.size * 16 + (payload.label?.let { 64 + it.text.length * 2 } ?: 0)
+            is ImagePayload -> 128 + payload.cropMask.size * 16
             else -> 96
         }
         return 128 + payloadBytes

@@ -33,11 +33,11 @@ class PdfIsolatedService : Service() {
         var fdOwnedByBinding = false
         try {
             val recipient = requireNotNull(message.replyTo)
-            if (client == null) {
+            if (client != recipient.binder) {
+                death?.let { callback -> client?.unlinkToDeath(callback, 0) }
                 client = recipient.binder
                 death = IBinder.DeathRecipient { handler.post { resetClient() } }.also { recipient.binder.linkToDeath(it, 0) }
             }
-            require(client == recipient.binder) { "PDF service already has an owner" }
             if (message.what == PDF_CANCEL) return // replies are rejected by request id at the client
             require(message.what == PDF_REQUEST)
             val id = bundle.getLong("id")
@@ -55,8 +55,9 @@ class PdfIsolatedService : Service() {
             response.putLong("epoch", epoch)
             try { recipient.send(Message.obtain(null, PDF_REPLY).apply { data = response }) }
             finally { closeReplyBuffer(response) }
-        } catch (_: Exception) {
-            val response = encodeReply(PdfReply.Failed("PDF service rejected request"))
+        } catch (e: Exception) {
+            android.util.Log.e("PdfIsolatedService", "Failed to process message", e)
+            val response = encodeReply(PdfReply.Failed("PDF service rejected request: ${e.message}"))
             response.putLong("id", bundle.getLong("id"))
             response.putLong("epoch", bundle.getLong("epoch"))
             runCatching { message.replyTo?.send(Message.obtain(null, PDF_REPLY).apply { data = response }) }

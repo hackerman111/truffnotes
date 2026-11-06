@@ -189,7 +189,7 @@ data class TextPayload(
 ) : ObjectPayload {
     init {
         require(fontSizePt > 0.0 && fontSizePt.isFinite() && fontSizePt <= 10000.0) { "fontSizePt must be positive finite and bounded" }
-        require(text.length <= 1000000 && runs.size <= 100000 && fontFamily.length <= 256)
+        require(text.length <= 10000000 && runs.size <= 100000 && fontFamily.length <= 256)
         require(runs.all { it.start >= 0 && it.end >= it.start && it.end <= text.length })
     }
 }
@@ -233,7 +233,7 @@ data class ImagePayload(
     val containerBounds: DocRect? = null
 ) : ObjectPayload {
     init {
-        require(naturalWidthPx > 0 && naturalHeightPx > 0 && naturalWidthPx.toLong()*naturalHeightPx <= 100000000L) { "Natural dimensions exceed budget" }
+        require(naturalWidthPx > 0 && naturalHeightPx > 0 && naturalWidthPx.toLong()*naturalHeightPx <= 1000000000L) { "Natural dimensions exceed budget" }
         require(exifOrientation in 1..8 && posterFrame in 0..119 && cropMask.size <= 10000)
         require(cropMask.isEmpty() || cropMask.size >= 3)
     }

@@ -471,6 +471,13 @@ class Runtime private constructor(
     fun notebookState(session:SessionKey):NotebookDocumentState = publishedNotebooks[session] ?: NotebookDocumentState(snapshot=latestSnapshot(session))
     fun notebookThumbnail(documentId:String,maxEdge:Int):Outcome<NotebookThumbnail,FeatureError> =
         androidFeatures?.thumbnail(documentId,maxEdge) ?: Outcome.Failure(FeatureError.InvalidParameters("Android renderer unavailable"))
+    override fun activeSessionFor(documentId: String): SessionKey? {
+        val doc = DocumentId(documentId)
+        val epoch = latestEpochByDocument[doc] ?: return null
+        val key = SessionKey(doc, SessionEpoch(epoch))
+        val ctx = activeSessions[key] ?: return null
+        return if (!ctx.closed) key else null
+    }
 
     private fun publishNotebook(ctx:SessionContext) {
         val page=ctx.viewport.activePageId ?: ctx.state.pages.firstOrNull()?.id
@@ -937,7 +944,7 @@ class Runtime private constructor(
     }
 
     private fun processNotebookToolInput(ctx:SessionContext,batch:InputBatch):Boolean {
-        if(ctx.notebookTool in setOf("pen","fountain","pencil","brush","highlighter","ruler") || batch.toolType==inkspace.core.ink.InputToolType.FINGER) return false
+        if(ctx.notebookTool in setOf("pen","fountain","pencil","brush","highlighter","ruler")) return false
         if(batch.isEffectiveCancel) {ctx.toolPaths.remove(batch.pointerId);ctx.activeEphemeralOverlays.remove(batch.pointerId);return true}
         if(batch.action==InputActionKind.DOWN) {
             if(ctx.toolPaths.size>=16) {reportFeatureError(ctx.session,FeatureError.InvalidParameters("Too many active pointers"));return true}

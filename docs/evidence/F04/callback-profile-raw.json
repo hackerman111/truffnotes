@@ -4,10 +4,10 @@
   "quantile_method": "nearest_rank_inclusive_sorted_1_indexed",
   "target_p95_ms": 1.0,
   "sample_count": 550,
-  "min_ms": 0.004749,
-  "p50_ms": 0.007124,
-  "p95_ms": 0.017810,
-  "p99_ms": 0.047493,
-  "max_ms": 0.056991,
+  "min_ms": 0.003561,
+  "p50_ms": 0.005937,
+  "p95_ms": 0.015435,
+  "p99_ms": 0.067676,
+  "max_ms": 0.108045,
   "budget_satisfied": true
 }

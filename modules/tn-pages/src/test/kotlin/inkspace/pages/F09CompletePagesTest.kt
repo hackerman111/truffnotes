@@ -14,7 +14,8 @@ import org.junit.jupiter.api.Test
 class F09CompletePagesTest {
     private fun state() = DocumentState.createInitial(DocumentId("pages-complete"))
     private fun apply(s: DocumentState, action: PageAction): AppliedEdit {
-        val plan = PagePlanner.plan(s, action).getOrNull() ?: fail("Action rejected: $action")
+        val outcome = PagePlanner.plan(s, action)
+        val plan = outcome.getOrNull() ?: fail("Action rejected: $action, error: ${outcome.errorOrNull()}")
         return applyPlan(s, validatePlan(s, plan, Limits()).getOrNull()!!).getOrNull()!!
     }
     @Test fun templateSnapshotOutlineAndBookmarksSurviveCodecAndUndo() {

@@ -115,7 +115,12 @@ class AndroidPdfWorkspace(private val context: Context, private val runtime: Run
         workerOnly()
         require(runtime.latestViewport(session)?.isReadOnly != true) { "Notebook is read only" }
         val staging = stager(session)
-        val staged = requireNotNull(context.contentResolver.openInputStream(uri)).use { staging.stage(it, 268_435_456L, "pdf") }
+        val staged = (if (uri.scheme == "file") {
+            val path = uri.path ?: throw IllegalArgumentException("Invalid file URI")
+            java.io.FileInputStream(File(path))
+        } else {
+            context.contentResolver.openInputStream(uri) ?: throw IllegalArgumentException("Could not open stream for $uri")
+        }).use { staging.stage(it, 268_435_456L, "pdf") }
         sourceFiles[staged.assetId] = staging.localFile(staged.assetId)
         val opened = try { await(PdfRequest.Open(staged.assetId, password)) as PdfReply.Opened } catch (failure: Exception) {
             sourceFiles.remove(staged.assetId)
@@ -128,7 +133,8 @@ class AndroidPdfWorkspace(private val context: Context, private val runtime: Run
             }
             val snapshot = requireNotNull(runtime.latestSnapshot(session)) { "Notebook closed during PDF import" }
             require(runtime.latestViewport(session)?.isReadOnly != true) { "Notebook became read only" }
-            val plan = PdfImportPlanner.plan(snapshot, PdfImportAction.Pages(pages, replaceBlankInitial = asDocument), PlanContext(gestureId = GestureId("pdf-${java.util.UUID.randomUUID()}"))).getOrNull()
+            val replaceBlank = asDocument && snapshot.pages.size == 1 && snapshot.totalObjectCount == 0
+            val plan = PdfImportPlanner.plan(snapshot, PdfImportAction.Pages(pages, replaceBlankInitial = replaceBlank), PlanContext(gestureId = GestureId("pdf-${java.util.UUID.randomUUID()}"))).getOrNull()
                 ?: error("PDF page import validation failed")
             val submitted = runtime.trySend(AppCommand.SubmitEdit(session, plan, estimatedBytes = 1024L + plan.mutations.size * 512L, stagedAssets = listOf(staged)))
             submitted.getOrNull() ?: error(submitted.toString())

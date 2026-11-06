@@ -601,7 +601,16 @@ class CanvasReplay {
                                 val crop = payload.cropRect ?: DocRect(0.0,0.0,payload.naturalWidthPx.toDouble(),payload.naturalHeightPx.toDouble())
                                 softwareSurface?.drawRaster(tile.widthPx,tile.heightPx,local,obj.transform,camera,effectiveOpacity,
                                     { x,y -> tile.pixelAt(x,y) }, { u,v ->
-                                        val px = u * payload.naturalWidthPx; val py = v * payload.naturalHeightPx
+                                        val (px, py) = when (payload.exifOrientation) {
+                                            2 -> Pair((1.0 - u) * payload.naturalWidthPx, v * payload.naturalHeightPx)
+                                            3 -> Pair((1.0 - u) * payload.naturalWidthPx, (1.0 - v) * payload.naturalHeightPx)
+                                            4 -> Pair(u * payload.naturalWidthPx, (1.0 - v) * payload.naturalHeightPx)
+                                            5 -> Pair(v * payload.naturalWidthPx, u * payload.naturalHeightPx)
+                                            6 -> Pair(v * payload.naturalWidthPx, (1.0 - u) * payload.naturalHeightPx)
+                                            7 -> Pair((1.0 - v) * payload.naturalWidthPx, (1.0 - u) * payload.naturalHeightPx)
+                                            8 -> Pair((1.0 - v) * payload.naturalWidthPx, u * payload.naturalHeightPx)
+                                            else -> Pair(u * payload.naturalWidthPx, v * payload.naturalHeightPx)
+                                        }
                                         px >= crop.left && px <= crop.right && py >= crop.top && py <= crop.bottom &&
                                             (payload.cropMask.isEmpty() || insidePolygon(px,py,payload.cropMask))
                                     })

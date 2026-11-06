@@ -134,11 +134,19 @@ fun BaselineEditorScreen(
                                     }
                                 }
                             )
+                            if (holder.surface.isValid) {
+                                onSurfaceAvailable?.invoke(holder.surface)
+                            }
                             if (onMotionEvent != null) {
                                 setOnTouchListener { _, event ->
                                     onMotionEvent(event)
                                 }
                             }
+                        }
+                    },
+                    update = { view ->
+                        if (view.holder.surface.isValid) {
+                            onSurfaceAvailable?.invoke(view.holder.surface)
                         }
                     }
                 )

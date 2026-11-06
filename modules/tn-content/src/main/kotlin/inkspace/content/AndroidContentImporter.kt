@@ -14,8 +14,12 @@ class AndroidContentImporter(private val resolver: ContentResolver, private val 
                              private val decoder: AndroidImageDecoder) {
     fun importUri(uri: Uri): Outcome<ContentImportResult, ContentFailure> = try {
         require(uri.scheme == ContentResolver.SCHEME_CONTENT || uri.scheme == ContentResolver.SCHEME_FILE) { "Unsupported image URI scheme" }
-        val staged = (resolver.openInputStream(uri) ?: throw IllegalArgumentException("Provider returned no image stream"))
-            .use { staging.stage(it, 268_435_456L, "image") }
+        val staged = (if (uri.scheme == ContentResolver.SCHEME_FILE) {
+            val path = uri.path ?: throw IllegalArgumentException("Invalid file URI")
+            java.io.FileInputStream(java.io.File(path))
+        } else {
+            resolver.openInputStream(uri) ?: throw IllegalArgumentException("Provider returned no image stream")
+        }).use { staging.stage(it, 268_435_456L, "image") }
         val header = decoder.header(staged.assetId)
         Outcome.Success(ContentImportResult(staged, header.width, header.height, header.exifOrientation))
     } catch (error: Exception) { Outcome.Failure(ContentFailure(error.message ?: "Image import failed")) }

@@ -2,6 +2,7 @@ package inkspace.app
 
 import android.os.Bundle
 import android.net.Uri
+import android.view.MotionEvent
 import android.content.Intent
 import android.content.ClipData
 import android.content.Context
@@ -51,13 +52,28 @@ class MainActivity : ComponentActivity() {
 
     private fun importResource(uri: Uri?, mimeType: String) {
         if (uri == null) return
-        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         val asDocument = importAsDocument
         lifecycleScope.launch {
             try {
+                // Immediately stage the content stream within Activity lifecycle while SAF permission is active
+                val stagedFile = withContext(Dispatchers.IO) {
+                    val dir = File(cacheDir, "staged_imports").apply { mkdirs() }
+                    dir.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86_400_000L }?.forEach { it.delete() }
+                    val ext = if (mimeType == "application/pdf") ".pdf" else ".img"
+                    val file = File.createTempFile("import-", ext, dir)
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        file.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    } ?: throw java.io.IOException("Cannot open input stream for $uri")
+                    file
+                }
                 val target = container ?: return@launch
-                withTimeout(5000) { while (target.controller.uiState.activeSession == null) delay(16) }
-                val result = withContext(Dispatchers.IO) { target.notebooks.perform(NotebookAction.ImportResource(uri.toString(), mimeType, asDocument)) }
+                if (!asDocument) {
+                    withTimeout(5000) { while (target.resolveActiveSession() == null) delay(16) }
+                }
+                val localUri = Uri.fromFile(stagedFile)
+                val result = withContext(Dispatchers.IO) { target.notebooks.perform(NotebookAction.ImportResource(localUri.toString(), mimeType, asDocument)) }
                 result.errorOrNull()?.let { Toast.makeText(this@MainActivity, it.toString(), Toast.LENGTH_LONG).show() }
             } catch (error: Exception) {
                 Toast.makeText(this@MainActivity, error.message ?: "Import failed", Toast.LENGTH_LONG).show()
@@ -174,7 +190,8 @@ class MainActivity : ComponentActivity() {
                                     currentContainer.onSurfaceDestroyed(surfaceSession)
                                 },
                                 onMotionEvent = { event ->
-                                    currentContainer.submitMotionEvent(event).isSuccess
+                                    currentContainer.submitMotionEvent(event)
+                                    true
                                 }
                             )
                             }

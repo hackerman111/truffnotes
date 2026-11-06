@@ -7,23 +7,23 @@
   "metrics": {
     "main_callback_dispatch_ms": {
       "budget_p95_ms": 1.0,
-      "p50_ms": 0.0054,
-      "p95_ms": 0.0173
+      "p50_ms": 0.0071,
+      "p95_ms": 0.0273
     },
     "engine_ingest_64_samples_ms": {
       "budget_p95_ms": 2.0,
-      "p50_ms": 0.0937,
-      "p95_ms": 0.1196
+      "p50_ms": 0.0914,
+      "p95_ms": 0.2315
     },
     "input_to_canvas_post_w1_ms": {
       "budget_p95_ms": 8.0,
-      "p50_ms": 1.2554,
-      "p95_ms": 3.8048
+      "p50_ms": 2.0623,
+      "p95_ms": 6.6145
     },
     "durable_commit_lag_w1_ms": {
       "budget_p95_ms": 200.0,
-      "p50_ms": 0.7522,
-      "p95_ms": 1.1657
+      "p50_ms": 1.3227,
+      "p95_ms": 2.5147
     }
   },
   "invariants": {

@@ -127,15 +127,17 @@ object PagePlanner {
                 val layers = read.layers.filter { it.pageId==page.id }
                 val layerMap=layers.associate { it.id to LayerId("${action.prefix}-${it.id.value}") }
                 mutations += AddPage(copy,if(action.index<0)read.pages.indexOf(page)+1 else action.index)
-                layers.forEach { mutations += AddLayer(it.copy(id=layerMap.getValue(it.id),pageId=copy.id)) }
+                layers.forEach { mutations += AddLayer(it.copy(id=layerMap.getValue(it.id),pageId=copy.id,isLocked=false)) }
                 cloneItems(objects(read,layerMap.keys),action.prefix,layerMap,copy.spaceId,mapOf(page.id to copy.id))
+                layers.filter { it.isLocked }.forEach { mutations += SetLayerLock(layerMap.getValue(it.id), true) }
             }
             is PageAction.DuplicateLayer -> {
                 val layer=requireNotNull(read.getLayer(action.layer)) { "Layer missing" }
                 val page=requireNotNull(read.getPage(layer.pageId))
                 val target=LayerId("${action.prefix}-${layer.id.value}")
-                mutations += AddLayer(layer.copy(id=target,name="${layer.name} copy"),read.layers.indexOf(layer)+1)
+                mutations += AddLayer(layer.copy(id=target,name="${layer.name} copy",isLocked=false),read.layers.indexOf(layer)+1)
                 cloneItems(objects(read,setOf(layer.id)),action.prefix,mapOf(layer.id to target),page.spaceId)
+                if (layer.isLocked) mutations += SetLayerLock(target, true)
             }
             is PageAction.GroupLayers -> {
                 require(action.layers.isNotEmpty() && (action.groupId==null || action.groupId.isNotBlank()))
@@ -166,13 +168,23 @@ object PagePlanner {
             }
             is PageAction.Reorder -> mutations += ReorderPage(action.ids.toList())
             is PageAction.Delete, is PageAction.Clear -> {
+                val isDelete = action is PageAction.Delete
                 val id = if (action is PageAction.Delete) action.page else (action as PageAction.Clear).page
                 requireNotNull(read.getPage(id)) { "Page missing" }
                 val layers = read.layers.filter { it.pageId == id }
-                clearLayers(layers)
-                if (action is PageAction.Delete) {
+                if (isDelete) {
+                    for (layer in layers) {
+                        if (layer.isLocked) mutations += SetLayerLock(layer.id, false)
+                    }
+                    val items = objects(read, layers.map { it.id }.toSet())
+                    for (item in items) {
+                        if (item.isLocked) mutations += SetObjectLock(item.id, false)
+                    }
+                    items.sortedByDescending { it.payload is inkspace.core.payload.GroupPayload }.forEach { mutations += RemoveObject(it.id) }
                     layers.forEach { mutations += RemoveLayer(it.id) }
                     mutations += RemovePage(id)
+                } else {
+                    clearLayers(layers)
                 }
             }
             is PageAction.Resize -> {

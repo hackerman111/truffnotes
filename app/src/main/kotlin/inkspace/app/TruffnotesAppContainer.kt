@@ -36,11 +36,18 @@ class TruffnotesAppContainer private constructor(
     val controller: BaselineSessionController,
     val notebooks: NotebookGateway
 ) {
-    fun bindDrawingSurface(surface:android.view.Surface) {
-        controller.uiState.activeSession?.let { runtime.bindDrawingSurface(it,surface) }
+    fun resolveActiveSession(): SessionKey? {
+        val uiSession = controller.uiState.activeSession
+        if (uiSession != null) return uiSession
+        val activeDoc = notebooks.workspace().active?.documentId ?: return null
+        return runtime.activeSessionFor(activeDoc)
     }
-    fun createTextEditorView(context:android.content.Context,id:String?):android.view.View? =
-        controller.uiState.activeSession?.let { runtime.createTextEditorView(context,it,id) }
+
+    fun bindDrawingSurface(surface: android.view.Surface) {
+        resolveActiveSession()?.let { runtime.bindDrawingSurface(it, surface) }
+    }
+    fun createTextEditorView(context: android.content.Context, id: String?): android.view.View? =
+        resolveActiveSession()?.let { runtime.createTextEditorView(context, it, id) }
 
     fun syncEvents(maxBatch: Int = 64): List<AppEvent> {
         val events = controller.syncEvents(maxBatch)
@@ -66,7 +73,7 @@ class TruffnotesAppContainer private constructor(
     private val surfaceEpochs = mutableMapOf<SessionKey, SurfaceEpoch>()
 
     fun onSurfaceAttached(widthPx: Int, heightPx: Int): Outcome<SurfaceEpoch, SubmitError> {
-        val session = controller.uiState.activeSession
+        val session = resolveActiveSession()
             ?: return Outcome.Failure(SubmitError.StaleSession("none", "No active session"))
         val attached = surfaceHost.onSurfaceCreated(session, widthPx, heightPx)
         if (attached is Outcome.Success) {
@@ -77,7 +84,7 @@ class TruffnotesAppContainer private constructor(
     }
 
     fun onSurfaceChanged(widthPx: Int, heightPx: Int): Outcome<ResizeGeneration, SubmitError> {
-        val session = controller.uiState.activeSession
+        val session = resolveActiveSession()
             ?: return Outcome.Failure(SubmitError.StaleSession("none", "No active session"))
         return surfaceHost.onSurfaceChanged(session, widthPx, heightPx)
     }
@@ -111,7 +118,7 @@ class TruffnotesAppContainer private constructor(
     }
 
     fun onBackgroundFlush(): Outcome<RequestId, SubmitError> {
-        val session = controller.uiState.activeSession
+        val session = resolveActiveSession()
             ?: return Outcome.Failure(SubmitError.StaleSession("none", "No active session"))
         return runtime.trySend(AppCommand.BackgroundFlush(session))
     }
@@ -130,7 +137,7 @@ class TruffnotesAppContainer private constructor(
         tilts: FloatArray,
         timestampsMs: LongArray
     ): Outcome<RequestId, SubmitError> {
-        val session = controller.uiState.activeSession
+        val session = resolveActiveSession()
             ?: return Outcome.Failure(SubmitError.StaleSession("none", "No active session"))
         val seq = inputTransport.nextSequenceNumber()
         val bufOutcome = inputTransport.acquireBuffer(session, pointerId, seq, action)
@@ -167,15 +174,41 @@ class TruffnotesAppContainer private constructor(
     }
 
     fun submitMotionEvent(event: MotionEvent): Outcome<RequestId, SubmitError> {
-        val session = controller.uiState.activeSession
+        val session = resolveActiveSession()
             ?: return Outcome.Failure(SubmitError.StaleSession("none", "No active session"))
-        val leasedOutcome = inputTransport.extractFromMotionEvent(session, event)
+        val actionMasked = event.actionMasked
+        if (actionMasked == MotionEvent.ACTION_MOVE && event.pointerCount > 1) {
+            var lastOutcome: Outcome<RequestId, SubmitError> = Outcome.Success(RequestId(0))
+            for (p in 0 until event.pointerCount) {
+                val leasedOutcome = inputTransport.extractInkBatchFromMotionEvent(session, event, pointerIndex = p)
+                val leased = when (leasedOutcome) {
+                    is Outcome.Failure -> return leasedOutcome
+                    is Outcome.Success -> leasedOutcome.value
+                }
+                try {
+                    val dispatchRes = controller.dispatchInputBatch(leased.leasedBatch.batch)
+                    if (dispatchRes is Outcome.Failure) return dispatchRes
+                    val inkRes = runtime.submitInkBatch(leased.inkBatch)
+                    if (inkRes is Outcome.Failure) return inkRes
+                    lastOutcome = inkRes
+                } finally {
+                    leased.close()
+                }
+            }
+            return lastOutcome
+        }
+        val leasedOutcome = inputTransport.extractInkBatchFromMotionEvent(session, event)
         val leased = when (leasedOutcome) {
             is Outcome.Failure -> return leasedOutcome
             is Outcome.Success -> leasedOutcome.value
         }
         return try {
-            controller.dispatchInputBatch(leased.batch)
+            val dispatchRes = controller.dispatchInputBatch(leased.leasedBatch.batch)
+            if (dispatchRes is Outcome.Failure) {
+                dispatchRes
+            } else {
+                runtime.submitInkBatch(leased.inkBatch)
+            }
         } finally {
             leased.close()
         }

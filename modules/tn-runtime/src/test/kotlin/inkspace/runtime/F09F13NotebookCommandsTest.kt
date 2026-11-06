@@ -1,5 +1,6 @@
 package inkspace.runtime
 import inkspace.core.id.*
+import inkspace.core.ink.*
 import inkspace.core.workspace.*
 import inkspace.core.runtime.*
 import org.junit.jupiter.api.Test
@@ -34,6 +35,22 @@ class F09F13NotebookCommandsTest {
    rt.trySend(AppCommand.UpdateViewport(viewport.copy(isReadOnly=true)));rt.drainEngineLoopForTest()
    assertTrue(rt.performNotebookAction(s,NotebookAction.InsertText("blocked")).isFailure)
    assertEquals(0,rt.latestSnapshot(s)!!.totalObjectCount)
+  } finally {rt.closeForTest()}
+ }
+ @Test fun fingerTouchWorksWithTools(@TempDir dir:Path) {
+  val rt=Runtime.start(RuntimeConfig(storageRootPath=dir.toString())).getOrNull()!!
+  try {
+   val s=rt.openSessionSyncForTest(DocumentId("finger-tools"))
+   assertTrue(rt.performNotebookAction(s,NotebookAction.Tool("shape")).isSuccess)
+   val down=InputBatch.fromSamples(s,pointerId=0,sequenceNumber=1L,action=InputActionKind.DOWN,realSamples=listOf(RealSample(10f,10f,0.5f,0f,100L)),toolType=InputToolType.FINGER).getOrNull()!!
+   val move=InputBatch.fromSamples(s,pointerId=0,sequenceNumber=2L,action=InputActionKind.MOVE,realSamples=listOf(RealSample(100f,100f,0.5f,0f,120L)),toolType=InputToolType.FINGER).getOrNull()!!
+   val up=InputBatch.fromSamples(s,pointerId=0,sequenceNumber=3L,action=InputActionKind.UP,realSamples=listOf(RealSample(100f,100f,0.5f,0f,130L)),toolType=InputToolType.FINGER).getOrNull()!!
+   rt.submitInkBatch(down)
+   rt.submitInkBatch(move)
+   rt.submitInkBatch(up)
+   rt.drainEngineLoopForTest()
+   assertEquals(1,rt.latestSnapshot(s)!!.totalObjectCount)
+   assertTrue(rt.latestSnapshot(s)!!.orderedSceneObjects().single().payload is inkspace.core.payload.ShapePayload)
   } finally {rt.closeForTest()}
  }
 }

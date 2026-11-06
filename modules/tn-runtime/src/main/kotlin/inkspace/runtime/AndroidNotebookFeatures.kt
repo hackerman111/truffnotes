@@ -172,18 +172,27 @@ class AndroidNotebookFeatures(private val runtime: Runtime, private val context:
         if(factor<1) scene=scene.copy(viewportWidthPx=(scene.viewportWidthPx*factor).toInt().coerceAtLeast(1),viewportHeightPx=(scene.viewportHeightPx*factor).toInt().coerceAtLeast(1),
             camera=scene.camera.copy(scale=scene.camera.scale*factor,translateX=scene.camera.translateX*factor,translateY=scene.camera.translateY*factor))
         val cpu=runtime.governor.tryReserve(inkspace.core.runtime.MemoryCategory.CPU_RASTER_TILES,8L*1024*1024,"frame-raster-work").getOrNull() ?: return
+        val targetGraphicsBytes = scene.viewportWidthPx.toLong() * scene.viewportHeightPx * 8L
         val graphics=runtime.governor.tryReserve(inkspace.core.runtime.MemoryCategory.CONTROLLED_GRAPHICS_TARGETS,
-            scene.viewportWidthPx.toLong()*scene.viewportHeightPx*24,"android-frame-targets").getOrNull()
-        if(graphics==null) {cpu.close();return}
+            targetGraphicsBytes,"android-frame-targets").getOrNull()
+        if(graphics==null) {
+            android.util.Log.e("TruffnotesDraw", "Failed to reserve frame graphics budget: $targetGraphicsBytes bytes")
+            cpu.close();return
+        }
         try {
         animateImages=true
         val result=renderer(session).renderOnExecutor(RenderRequest.Draw(scene,capturePixels=true))
+        if(result is Outcome.Failure) {
+            android.util.Log.e("TruffnotesDraw", "Render failed: ${result.error}")
+            runtime.reportFeatureError(session, FeatureError.InvalidParameters(result.error.toString()))
+            return
+        }
         val frame=result.getOrNull() as? RenderReply.FrameDrawn ?: return
         val pixels=frame.copyCapturedPixels() ?: return
         val bitmap=Bitmap.createBitmap(pixels,frame.widthPx,frame.heightPx,Bitmap.Config.ARGB_8888)
         try {
             if(synchronized(bindings) { bindings[session] !== surface } || !surface.isValid) return
-            val canvas=surface.lockCanvas(null)
+            val canvas=surface.lockCanvas(null) ?: return
             try { canvas.drawBitmap(bitmap,null,Rect(0,0,canvas.width,canvas.height),null) } finally { surface.unlockCanvasAndPost(canvas) }
         } finally { bitmap.recycle() }
         val gif=activeGif
@@ -301,7 +310,7 @@ class AndroidNotebookFeatures(private val runtime: Runtime, private val context:
                 val session=SessionKey(snapshot.version.document,SessionEpoch(1))
                 val cpu=runtime.governor.tryReserve(inkspace.core.runtime.MemoryCategory.CPU_RASTER_TILES,8L*1024*1024,"thumbnail-work").getOrNull() ?: return@submit failure("Thumbnail memory cap")
                 val graphics=runtime.governor.tryReserve(inkspace.core.runtime.MemoryCategory.CONTROLLED_GRAPHICS_TARGETS,
-                    scene.viewportWidthPx.toLong()*scene.viewportHeightPx*24,"thumbnail-target").getOrNull()
+                    scene.viewportWidthPx.toLong()*scene.viewportHeightPx*8L,"thumbnail-target").getOrNull()
                 if(graphics==null) {cpu.close();return@submit failure("Thumbnail graphics cap")}
                 try {
                     animateImages=false

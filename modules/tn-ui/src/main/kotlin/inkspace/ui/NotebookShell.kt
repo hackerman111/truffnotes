@@ -43,6 +43,8 @@ fun NotebookShell(
     gateway: NotebookGateway,
     onImportImage: (Boolean) -> Unit = {},
     onImportPdf: (Boolean) -> Unit = {},
+    onCamera: (Boolean) -> Unit = {},
+    onClipboardImage: (Boolean) -> Unit = {},
     textEditorFactory: ((android.content.Context, String?) -> android.view.View?)? = null,
     editor: @Composable () -> Unit
 ) {
@@ -166,6 +168,8 @@ fun NotebookShell(
                         DropdownMenuItem(text = { Text("From Template") }, onClick = { libraryMenu = false; sectionName = LibrarySection.TEMPLATES.name })
                         DropdownMenuItem(text = { Text("Import PDF") }, onClick = { libraryMenu = false; onImportPdf(true) })
                         DropdownMenuItem(text = { Text("Import Image") }, onClick = { libraryMenu = false; onImportImage(true) })
+                        DropdownMenuItem(text = { Text("Camera") }, onClick = { libraryMenu = false; onCamera(true) })
+                        DropdownMenuItem(text = { Text("Paste Image") }, onClick = { libraryMenu = false; onClipboardImage(true) })
                     }
                 }
                 TextButton(onClick = { grid = !grid }) { Text(if (grid) "List" else "Grid") }

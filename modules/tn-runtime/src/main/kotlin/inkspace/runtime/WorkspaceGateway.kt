@@ -87,6 +87,15 @@ class WorkspaceGateway(
         }
     }
 
+    private fun currentSession(): SessionKey? {
+        val activeDoc = views.state.active?.documentId
+        if (activeDoc != null) {
+            val resolved = app.activeSessionFor(activeDoc)
+            if (resolved != null) return resolved
+        }
+        return session()
+    }
+
     fun onRuntimeEvents(events: List<AppEvent>) {
         for (event in events) {
             if (event is AppEvent.SessionClosed && event.session == pendingClose) pendingClose = null
@@ -103,8 +112,12 @@ class WorkspaceGateway(
             if (event is AppEvent.SaveStatusChanged && views.state.active?.documentId == event.saveStatus.session.document.value) {
                 views.dispatch(ViewAction.Dirty(event.saveStatus.hasUnsavedChanges))
             }
+            if (event is AppEvent.ErrorEvent) {
+                importError.set(event.message)
+            }
             if (event !is AppEvent.SessionOpened) continue
             if (views.state.active?.documentId == event.session.document.value) views.dispatch(ViewAction.Dirty(event.saveStatus.hasUnsavedChanges))
+            val isImporting = pendingImports.containsKey(event.session.document.value)
             pendingImports.remove(event.session.document.value)?.let { resource ->
                 try {
                     importWorker.execute {
@@ -122,6 +135,10 @@ class WorkspaceGateway(
                 tab.activePage?.let { featureDispatch(event.session, NotebookAction.SelectPage(it)) }
                 tab.activeLayer?.let { featureDispatch(event.session, NotebookAction.SelectLayer(it)) }
             }
+            if (isImporting) {
+                pendingDefaults.remove(event.session.document.value)
+                continue
+            }
             val defaults = pendingDefaults.remove(event.session.document.value) ?: continue
             val page = event.snapshot.pages.singleOrNull() ?: continue
             if (event.snapshot.version.revision.value != 0L) continue
@@ -132,10 +149,10 @@ class WorkspaceGateway(
         }
     }
     override fun queryPdf(query: PdfQuery): Outcome<PdfViewData, FeatureError> {
-        val current = session() ?: return Outcome.Failure(FeatureError.InvalidParameters("No active notebook"))
+        val current = currentSession() ?: return Outcome.Failure(FeatureError.InvalidParameters("No active notebook"))
         return pdfQuery(current, query)
     }
-    override fun editorState(): NotebookDocumentState = session()?.let(featureState) ?: NotebookDocumentState()
+    override fun editorState(): NotebookDocumentState = currentSession()?.let(featureState) ?: NotebookDocumentState()
 
     override fun thumbnail(documentId: String, maxEdge: Int) = thumbnails.get(documentId, maxEdge)
     override fun takeError(): String? = importError.getAndSet(null)
@@ -154,7 +171,6 @@ class WorkspaceGateway(
 
     @Synchronized override fun perform(action: NotebookAction): Outcome<RequestId, FeatureError> {
         loadWorkspace()
-        val current = session() ?: return Outcome.Failure(FeatureError.InvalidParameters("No active document"))
         if (action is NotebookAction.ImportResource && action.asDocument) {
             if (pendingOpen != null || pendingClose != null || pendingImports.size >= 4) return Outcome.Failure(FeatureError.InvalidParameters("Import or document switch pending"))
             val id = action.targetDocumentId ?: UUID.randomUUID().toString()
@@ -171,6 +187,7 @@ class WorkspaceGateway(
             }
             return Outcome.Success(RequestId(0))
         }
+        val current = currentSession() ?: return Outcome.Failure(FeatureError.InvalidParameters("No active document"))
         if (pendingOpen != null || pendingClose != null) return Outcome.Failure(FeatureError.InvalidParameters("Document switch pending"))
         val active = views.state.active ?: if (action is NotebookAction.ImportResource) TabState("import", current.document.value)
             else return Outcome.Failure(FeatureError.InvalidParameters("No active tab"))
@@ -206,7 +223,7 @@ class WorkspaceGateway(
         if (action is ViewAction.Open && library.entries().none { it.id == action.documentId && !it.isFolder && !it.trashed }) {
             return ViewUpdate(views.state, false)
         }
-        val current = session()
+        val current = currentSession()
         val status = current?.let { app.latestSaveStatus(it) }
         if (views.state.active?.documentId == current?.document?.value) {
             views.dispatch(ViewAction.Dirty(status?.hasUnsavedChanges == true))
