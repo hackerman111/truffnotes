@@ -12,6 +12,7 @@ import inkspace.core.id.*
 import inkspace.core.model.*
 import inkspace.core.objects.PlanContext
 import inkspace.core.outcome.Outcome
+import inkspace.core.outcome.map
 import inkspace.core.payload.*
 import inkspace.core.ports.RequestId
 import inkspace.core.render.*
@@ -195,6 +196,7 @@ class AndroidNotebookFeatures(private val runtime: Runtime, private val context:
             val canvas=surface.lockCanvas(null) ?: return
             try { canvas.drawBitmap(bitmap,null,Rect(0,0,canvas.width,canvas.height),null) } finally { surface.unlockCanvasAndPost(canvas) }
         } finally { bitmap.recycle() }
+        if (runtime.hasLaser(session)) mainHandler.postDelayed({ if (!closed) refresh(session) }, 32)
         val gif=activeGif
         if(gif?.first==session && scene.snapshot.directory.allResidentObjects().any { (it.payload as? ImagePayload)?.asset==gif.second && it.bounds.intersects(inkspace.render.CameraRelativeProjector.visibleWorldRect(scene.camera,scene.viewportWidthPx,scene.viewportHeightPx)) })
             mainHandler.postDelayed({ if(!closed && synchronized(bindings) { bindings.containsKey(session) }) refresh(session) },80)
@@ -296,6 +298,104 @@ class AndroidNotebookFeatures(private val runtime: Runtime, private val context:
         } } catch (_: java.util.concurrent.RejectedExecutionException) { return failure("Import queue is full") }
         return Outcome.Success(accepted)
     }
+    fun renderPreview(session: SessionKey, camera: CameraTransform, width: Int, height: Int): NotebookThumbnail? {
+        check(Looper.myLooper() != Looper.getMainLooper())
+        if (width !in 1..2048 || height !in 1..2048 || width.toLong()*height > 2_000_000) return null
+        return worker.submit<NotebookThumbnail?> {
+            val current = runtime.sceneForRendering(session) ?: return@submit null
+            val viewport = runtime.latestViewport(session) ?: return@submit null
+            val scene = current.copy(camera = camera, viewportWidthPx = width, viewportHeightPx = height)
+            val tiles = pdf.tiles(session, scene.snapshot, viewport.copy(camera = camera, widthPx = width, heightPx = height))
+            val frame = renderer(session).renderOnExecutor(RenderRequest.Draw(scene.copy(tiles = tiles), true)).getOrNull() as? RenderReply.FrameDrawn ?: return@submit null
+            NotebookThumbnail(frame.widthPx, frame.heightPx, frame.copyCapturedPixels()!!)
+        }.get(30, TimeUnit.SECONDS)
+    }
+    fun exportPages(session: SessionKey, snapshot: DocumentSnapshot, uri: Uri, mode: inkspace.exchange.ExportMode,
+        options: inkspace.core.workspace.ExportOptions = inkspace.core.workspace.ExportOptions(mode = mode.name)): List<String> {
+        check(Looper.myLooper() != Looper.getMainLooper())
+        return worker.submit<List<String>> {
+            val projection = if(options.scope in setOf("selection","objects")) {
+                inkspace.exchange.NativeSelection.project(snapshot,inkspace.exchange.NativeScope.Objects(options.objectIds.map(::ObjectId).toSet()),
+                    options.layerIds?.map(::LayerId)?.toSet(),(options.visibleOnly || options.scope == "visible")).snapshot
+            } else snapshot
+            val layers = projection.layers.map { layer -> layer.copy(isVisible = (options.layerIds?.contains(layer.id.value) != false) && (!(options.visibleOnly || options.scope == "visible") || layer.isVisible)) }
+            val records = projection.directory.allResidentObjects().asSequence().map { obj ->
+                val payload = (obj.payload as? StickyPayload)?.copy(isCollapsed = !options.stickyExpanded) ?: obj.payload
+                obj.copy(payload = payload, payloadDigest = inkspace.core.codec.CoreCodec.computePayloadDigest(payload))
+            }
+            val frozen = restoreSnapshot(SnapshotMetadata(projection.version,projection.kind,projection.pages,layers),records)
+            val page = frozen.pages.first()
+            val reveals = if(options.tapeRevealed) frozen.directory.allResidentObjects().filter { it.payload is TapePayload }.map { it.id }.toSet() else emptySet()
+            val scene = Scene(frozen, activeSpaceId = page.spaceId, surfaceEpoch = SurfaceEpoch(1),revealedTapeIds = reveals)
+            var report = emptyList<String>()
+            animateImages = false
+            try {
+                val range = when(options.scope) {
+                    "page", "region", "template" -> listOf(frozen.pages.getOrNull(options.firstPage-1)?.id ?: throw IllegalArgumentException("Page outside document"))
+                    "range" -> frozen.pages.subList(options.firstPage-1,options.lastPage).map { it.id }
+                    else -> frozen.pages.map { it.id }
+                }
+                val pages = if(mode == inkspace.exchange.ExportMode.PNG || mode == inkspace.exchange.ExportMode.JPEG) listOf(range.first()) else range
+                inkspace.pdf.android.PdfCompositionWriter.initialize(context.applicationContext)
+                AndroidPageExporter.export(scene, pages, mode, AndroidExchangeOutput(context.contentResolver, uri),
+                    region = options.region ?: if(options.scope in setOf("selection","objects")) frozen.directory.allResidentObjects().map { it.bounds }.reduceOrNull { a,b -> a.union(b) } else null,
+                    assetFile = { asset -> StreamingAssetStager(documentDirectory(session)).localFile(asset) },
+                    fallbackReport = { report = it }) { request, canvas ->
+                    val targetPage = frozen.pages.first { it.spaceId == request.scene.activeSpaceId }
+                    val bounds = when (request) {
+                        is RenderRequest.Snapshot -> request.regionDoc
+                        is RenderRequest.PdfOverlay -> request.pageBoundsDoc
+                        else -> DocRect(0.0, 0.0, targetPage.widthPt, targetPage.heightPt)
+                    }
+                    val scale = if (request is RenderRequest.Snapshot) request.scale else 1.0
+                    val viewport = inkspace.core.runtime.ViewportState(session, camera = CameraTransform(scale, -bounds.left*scale, -bounds.top*scale),
+                        widthPx = kotlin.math.ceil(bounds.width*scale).toInt().coerceAtLeast(1), heightPx = kotlin.math.ceil(bounds.height*scale).toInt().coerceAtLeast(1), activePageId = targetPage.id)
+                    val tiles = if(request is RenderRequest.PdfOverlay) emptyList() else pdf.tiles(session, request.scene.snapshot, viewport, requireComplete = true)
+                    val tiled = when (request) {
+                        is RenderRequest.Snapshot -> request.copy(scene = request.scene.copy(tiles = tiles))
+                        is RenderRequest.PdfOverlay -> request.copy(scene = request.scene.copy(tiles = tiles))
+                        else -> request
+                    }
+                    renderer(session).renderOnExecutor(tiled, canvas)
+                }
+                report
+            } finally { animateImages = true; rendererInstance?.releaseTransientTiles() }
+        }.get(120, TimeUnit.SECONDS)
+    }
+    fun queryPdf(session: SessionKey, query: inkspace.core.workspace.PdfQuery): Outcome<inkspace.core.workspace.PdfViewData, FeatureError> = try {
+        check(Looper.myLooper() != Looper.getMainLooper()) { "PDF queries must run off Main" }
+        worker.submit<Outcome<inkspace.core.workspace.PdfViewData, FeatureError>> {
+            val snapshot = runtime.latestSnapshot(session) ?: return@submit failure("Notebook closed")
+            val viewport = runtime.latestViewport(session) ?: return@submit failure("Viewport closed")
+            val obj = query.objectId?.let { snapshot.getObject(ObjectId(it)) }
+                ?: snapshot.directory.allResidentObjects().firstOrNull { it.payload is PdfObjectPayload && snapshot.getLayer(it.layer)?.pageId == viewport.activePageId }
+                ?: snapshot.directory.allResidentObjects().firstOrNull { it.payload is PdfObjectPayload }
+                ?: return@submit failure("No PDF page in this notebook")
+            val page = (obj.payload as? PdfObjectPayload)?.page ?: return@submit failure("Object is not PDF")
+            fun data(reply: inkspace.core.pdf.PdfReply.Text) = inkspace.core.workspace.PdfViewData(text = reply.spans.joinToString("") { it.text }, spans = reply.spans, nextIndex = reply.nextIndex)
+            when (query.command) {
+                "text" -> pdf.text(session, page, query.startIndex).map(::data)
+                "search", "search-hit" -> pdf.search(session, page, query.query).map { reply ->
+                    val payload = obj.payload as PdfObjectPayload
+                    val mapping = inkspace.pdf.PdfPageTransform(page.cropBox, page.rotation)
+                    val local = payload.localBounds ?: requireNotNull(obj.transform.invert()).transformRect(obj.bounds)
+                    val spans = reply.spans.map { span ->
+                        val b = span.bounds
+                        span.copy(bounds = obj.transform.transformRect(inkspace.core.unit.DocRect(
+                            local.left + b.left / mapping.width * local.width, local.top + b.top / mapping.height * local.height,
+                            local.left + b.right / mapping.width * local.width, local.top + b.bottom / mapping.height * local.height)))
+                    }
+                    runtime.showPdfSearchHit(session, spans.getOrNull(query.startIndex.coerceAtLeast(0))?.bounds)
+                    data(reply.copy(spans = spans))
+                }
+                "links" -> pdf.objectLinks(session, obj.id).map { inkspace.core.workspace.PdfViewData(links = it) }
+                "outline" -> pdf.outline(session, page.asset).map { inkspace.core.workspace.PdfViewData(outline = it.entries) }
+                "selection" -> pdf.selectedText(session, obj.id, query.selection ?: obj.bounds).map { inkspace.core.workspace.PdfViewData(text = it) }
+                else -> failure("Unknown PDF query")
+            }
+        }.get(30, TimeUnit.SECONDS)
+    } catch (error: Exception) { failure(error.cause?.message ?: error.message ?: "PDF query failed") }
+
     fun thumbnail(documentId: String,maxEdge: Int): Outcome<NotebookThumbnail,FeatureError> {
         check(Looper.myLooper()!=Looper.getMainLooper()) { "Thumbnail work must not run on Main" }
         if(maxEdge !in 16..512) return failure("Invalid thumbnail size")

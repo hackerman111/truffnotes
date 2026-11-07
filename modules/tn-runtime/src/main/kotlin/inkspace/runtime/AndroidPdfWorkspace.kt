@@ -200,7 +200,7 @@ class AndroidPdfWorkspace(private val context: Context, private val runtime: Run
     }
 
     @Synchronized
-    fun tiles(session: SessionKey, snapshot: DocumentSnapshot, viewport: ViewportState): List<TileArtifact> {
+    fun tiles(session: SessionKey, snapshot: DocumentSnapshot, viewport: ViewportState, requireComplete: Boolean = false): List<TileArtifact> {
         workerOnly()
         val visible = inkspace.render.CameraRelativeProjector.visibleWorldRect(viewport.camera, viewport.widthPx, viewport.heightPx)
         val activeSpace = snapshot.pages.find { it.id == viewport.activePageId }?.spaceId ?: snapshot.pages.firstOrNull()?.spaceId
@@ -217,9 +217,15 @@ class AndroidPdfWorkspace(private val context: Context, private val runtime: Run
                 }
             }
             if (cached != null && !cached.lease.isClosed()) { result += cached.tile; continue }
-            val reservation = runtime.governor.tryReserve(MemoryCategory.PDF_WORKING_SET, 24L * 1024 * 1024, "pdf-tile-work").getOrNull() ?: continue
+            val reservation = runtime.governor.tryReserve(MemoryCategory.PDF_WORKING_SET, 24L * 1024 * 1024, "pdf-tile-work").getOrNull() ?: run {
+                check(!requireComplete) { "Insufficient memory to export PDF content" }
+                continue
+            }
             try {
-                val tile = buildTile(session, obj, viewport, visible, key, pixelsPerResource) ?: continue
+                val tile = buildTile(session, snapshot, obj, viewport, visible, key, pixelsPerResource) ?: run {
+                    check(!requireComplete) { "Unable to render PDF content" }
+                    continue
+                }
                 synchronized(cacheLock) {
                     if (!closed) {
                         while ((cacheBytes + tile.byteSize > 16L * 1024 * 1024 || cache.size >= 16) && cache.isNotEmpty()) evictFirst()
@@ -228,7 +234,7 @@ class AndroidPdfWorkspace(private val context: Context, private val runtime: Run
                             cache[key] = Cached(tile, lease)
                             cacheBytes += tile.byteSize
                             result += tile
-                        }
+                        } else check(!requireComplete) { "Insufficient memory to retain export PDF tile" }
                     }
                 }
             } finally { reservation.close() }
@@ -236,7 +242,7 @@ class AndroidPdfWorkspace(private val context: Context, private val runtime: Run
         return result
     }
 
-    private fun buildTile(session: SessionKey, obj: SceneObject, viewport: ViewportState, visible: DocRect, key: String, pixelBudget: Long): TileArtifact? {
+    private fun buildTile(session: SessionKey, snapshot: DocumentSnapshot, obj: SceneObject, viewport: ViewportState, visible: DocRect, key: String, pixelBudget: Long): TileArtifact? {
         val payload = obj.payload as PdfObjectPayload
         val mapping = PdfPageTransform(payload.page.cropBox, payload.page.rotation)
         val bounds = intersection(obj.bounds, visible) ?: return null
@@ -264,7 +270,7 @@ class AndroidPdfWorkspace(private val context: Context, private val runtime: Run
             }
             val zero = point(0.0, 0.0); val x = point(1.0, 0.0); val y = point(0.0, 1.0)
             val matrix = Matrix().apply { setValues(floatArrayOf((x.x-zero.x).toFloat(), (y.x-zero.x).toFloat(), zero.x.toFloat(), (x.y-zero.y).toFloat(), (y.y-zero.y).toFloat(), zero.y.toFloat(), 0f, 0f, 1f)) }
-            val layerOpacity = runtime.latestSnapshot(session)?.getLayer(obj.layer)?.opacity ?: 1f
+            val layerOpacity = snapshot.getLayer(obj.layer)?.opacity ?: 1f
             Canvas(target).drawBitmap(source, matrix, Paint(Paint.FILTER_BITMAP_FLAG).apply { alpha = (255 * obj.style.opacity * layerOpacity).toInt().coerceIn(0, 255) })
             target.getPixels(pixels, 0, width, 0, 0, width, height)
             return TileArtifact(key, payload.page.asset, payload.page.pageIndex, bounds, width, height, inkspace.render.ScaleBucket.compute(viewport.camera.scale), pixels)

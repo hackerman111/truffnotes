@@ -10,7 +10,7 @@ object CommandRegistry {
         CommandDescriptor("pen"), CommandDescriptor("fountain"), CommandDescriptor("pencil"),
         CommandDescriptor("brush"), CommandDescriptor("highlighter"), CommandDescriptor("eraser"),
         CommandDescriptor("lasso"), CommandDescriptor("shape"), CommandDescriptor("ruler"),
-        CommandDescriptor("text"), CommandDescriptor("image"), CommandDescriptor("sticky"), CommandDescriptor("tape")
+        CommandDescriptor("text"), CommandDescriptor("image"), CommandDescriptor("sticky"), CommandDescriptor("tape"), CommandDescriptor("laser")
     ).associateBy { it.id }
     fun toolbar(id: String): CommandDescriptor? = commands[id]
     fun keyboard(key: String, ctrl: Boolean = false, shift: Boolean = false, textFocused: Boolean = false): CommandDescriptor? {
@@ -76,10 +76,19 @@ class Workspace(initial: WorkspaceState = WorkspaceState()) {
                 update { when (command.id) {
                     "readonly" -> it.copy(readOnly = !it.readOnly)
                     "focus" -> it.copy(focus = !it.focus)
-                    "pen", "fountain", "pencil", "brush", "highlighter", "eraser", "lasso", "shape", "ruler", "text", "image", "sticky", "tape" -> it.copy(tool = command.id)
+                    "pen", "fountain", "pencil", "brush", "highlighter", "eraser", "lasso", "shape", "ruler", "text", "image", "sticky", "tape", "laser" -> it.copy(tool = command.id)
                     else -> it
                 } }
             }
+            is ViewAction.SetToolbarLayout -> update { it.copy(settings = if (action.landscape) it.settings.copy(landscapeToolbar = action.layout) else it.settings.copy(portraitToolbar = action.layout)) }
+            is ViewAction.OpenZoom -> update { it.copy(zoom = action.state) }
+            is ViewAction.MoveZoom -> update { it.copy(zoom = it.zoom?.copy(region = action.region)) }
+            is ViewAction.ZoomAdvance -> update { it.copy(zoom = it.zoom?.advance(action.pageWidth, action.nextLine)) }
+            is ViewAction.SetToolConfig -> {
+                if (action.tool !in NOTEBOOK_TOOLS) return reject()
+                update { it.copy(settings = it.settings.copy(tools = it.settings.tools + (action.tool to action.config))) }
+            }
+            is ViewAction.SetGestureConfig -> update { it.copy(settings = it.settings.copy(gestures = action.settings)) }
             ViewAction.Reopen -> {
                 if (state.tabs.size >= 1000) return reject()
                 val tab = state.closedTabs.lastOrNull() ?: return reject()

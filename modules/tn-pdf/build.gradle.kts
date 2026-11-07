@@ -35,6 +35,7 @@ kotlin {
 
 dependencies {
     implementation("io.legere:pdfiumandroid:2.0.0")
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     implementation(project(":tn-core"))
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)

@@ -34,7 +34,8 @@ object InkToolArbiter {
         batch: InputBatch,
         ctx: InputContext,
         hasOtherActiveStylusPointer: Boolean,
-        lastStylusTimestampMs: Long
+        lastStylusTimestampMs: Long,
+        lastStylusPoint: Pair<Float, Float>? = null
     ): EffectiveInkToolMode {
         if (batch.isEffectiveCancel) {
             return EffectiveInkToolMode.CANCELED
@@ -57,7 +58,15 @@ object InkToolArbiter {
             val firstTs = if (batch.realSampleCount > 0) batch.realTimestampMs(0) else 0L
             val withinPalmWindow = lastStylusTimestampMs > Long.MIN_VALUE &&
                 (firstTs - lastStylusTimestampMs) in -50L..ctx.policy.palmRejectionWindowMs
-            if (hasOtherActiveStylusPointer || withinPalmWindow) {
+            val postureMatches = lastStylusPoint?.let { (x, y) ->
+                when (ctx.policy.palmPosture) {
+                    inkspace.core.ink.PalmPosture.ANY -> true
+                    inkspace.core.ink.PalmPosture.LEFT_OF_PEN -> batch.realX(0) <= x
+                    inkspace.core.ink.PalmPosture.RIGHT_OF_PEN -> batch.realX(0) >= x
+                    inkspace.core.ink.PalmPosture.BELOW_PEN -> batch.realY(0) >= y
+                }
+            } ?: true
+            if (hasOtherActiveStylusPointer || (withinPalmWindow && postureMatches)) {
                 return EffectiveInkToolMode.PALM_REJECTED
             }
         }

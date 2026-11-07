@@ -14,9 +14,9 @@ import kotlinx.serialization.Serializable
 data class NotebookDefaults(
     val cover: String = "plain", val paper: String = "blank",
     val widthPt: Double = 595.28, val heightPt: Double = 841.89,
-    val horizontalScroll: Boolean = false, val paperColor: Int = -1
+    val horizontalScroll: Boolean = false, val paperColor: Int = -1, val templatePage: Int = 1
 ) {
-    init { require(widthPt.isFinite() && heightPt.isFinite() && widthPt > 0 && heightPt > 0) }
+    init { require(widthPt.isFinite() && heightPt.isFinite() && widthPt > 0 && heightPt > 0 && templatePage > 0) }
 }
 
 @Serializable
@@ -28,6 +28,7 @@ data class LibraryEntry(
 )
 enum class LibrarySection { DOCUMENTS, FAVORITES, RECENT, TEMPLATES, TRASH }
 sealed interface LibraryAction {
+    data class Import(val entries: List<LibraryEntry>) : LibraryAction
     data class Create(val id: String, val name: String, val parentId: String? = null,
         val isFolder: Boolean = false, val defaults: NotebookDefaults = NotebookDefaults()) : LibraryAction
     data class Rename(val id: String, val name: String) : LibraryAction
@@ -49,7 +50,7 @@ data class TabState(
     val tool: String = "pen", val readOnly: Boolean = false, val focus: Boolean = false,
     val dirty: Boolean = false, val selectedIds: Set<String> = emptySet(),
     val activePage: String? = null, val activeLayer: String? = null,
-    val settings: EditorSettings = EditorSettings()
+    val settings: EditorSettings = EditorSettings(), val zoom: ZoomViewState? = null
 )
 @Serializable
 data class WorkspaceState(val tabs: List<TabState> = emptyList(), val activeTab: String? = null, val closedTabs: List<TabState> = emptyList(), val globalSettings: EditorSettings = EditorSettings()) {
@@ -68,6 +69,12 @@ sealed interface ViewAction {
     data class ActiveLayer(val id: String) : ViewAction
     data class Settings(val settings: EditorSettings) : ViewAction
     data class GlobalSettings(val settings: EditorSettings) : ViewAction
+    data class SetToolbarLayout(val layout: ToolbarLayout, val landscape: Boolean) : ViewAction
+    data class OpenZoom(val state: ZoomViewState? = ZoomViewState()) : ViewAction
+    data class MoveZoom(val region: inkspace.core.unit.DocRect) : ViewAction
+    data class ZoomAdvance(val pageWidth: Double, val nextLine: Boolean = false) : ViewAction
+    data class SetToolConfig(val tool: String, val config: ToolConfig) : ViewAction
+    data class SetGestureConfig(val settings: inkspace.core.ink.GestureSettings) : ViewAction
     data object Reopen : ViewAction
 }
 data class ViewUpdate(val state: WorkspaceState, val accepted: Boolean, val commandId: String? = null)
@@ -83,6 +90,7 @@ interface NotebookGateway {
     fun thumbnail(documentId: String, maxEdge: Int = 128): Outcome<NotebookThumbnail, FeatureError>
     fun copyFromTemplate(sourceId: String, id: String, name: String, defaults: NotebookDefaults): Outcome<OperationId, LibraryError>
     fun queryPdf(query: PdfQuery): Outcome<PdfViewData, FeatureError>
+    fun previewExport(options: ExportOptions): Outcome<String,FeatureError> = Outcome.Failure(FeatureError.InvalidParameters("Export preview unavailable"))
     fun takeError(): String? = null
     fun close() {}
 }
@@ -93,9 +101,15 @@ data class EditorSettings(
     val panel: String? = null, val panelDocked: Boolean = true,
     val penColor: Int = -16777216, val penWidthPt: Double = 2.0,
     val penOpacity: Float = 1f, val smoothing: Int = 1,
-    val listScale: Float = 1f
+    val listScale: Float = 1f,
+    val tools: Map<String, ToolConfig> = emptyMap(), val palettes: Map<String, Palette> = emptyMap(),
+    val presets: List<ToolPreset> = emptyList(),
+    val portraitToolbar: ToolbarLayout = ToolbarLayout(), val landscapeToolbar: ToolbarLayout = ToolbarLayout(),
+    val gestures: inkspace.core.ink.GestureSettings = inkspace.core.ink.GestureSettings(),
+    val inputPolicy: inkspace.core.ink.StylusInputPolicy = inkspace.core.ink.StylusInputPolicy()
 ) {
-    init { require(penWidthPt.isFinite() && penWidthPt in 0.1..100.0 && penOpacity in 0f..1f && smoothing in 0..3 && listScale in 0.5f..2f) }
+    fun configFor(tool: String): ToolConfig = tools[tool] ?: ToolConfig(color = penColor, widthPt = penWidthPt, opacity = penOpacity, smoothing = smoothing / 3f)
+    init { require(presets.size <= 100 && tools.size <= 32 && palettes.size <= 32); require(penWidthPt.isFinite() && penWidthPt in 0.1..100.0 && penOpacity in 0f..1f && smoothing in 0..3 && listScale in 0.5f..2f) }
 }
 
 sealed interface NotebookAction {
@@ -126,7 +140,7 @@ data class NotebookDocumentState(
 )
 class NotebookThumbnail(val width: Int, val height: Int, pixels: IntArray) {
     private val pixels = pixels.copyOf()
-    init { require(width in 1..256 && height in 1..256 && pixels.size == width * height) }
+    init { require(width in 1..2048 && height in 1..2048 && width.toLong() * height <= 2_000_000 && pixels.size == width * height) }
     fun copyPixels(): IntArray = pixels.copyOf()
     val byteSize: Int get() = pixels.size * 4
 }

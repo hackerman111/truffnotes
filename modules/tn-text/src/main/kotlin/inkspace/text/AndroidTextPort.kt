@@ -119,7 +119,7 @@ class AndroidTextPort(private val cacheByteCap: Long = 2L * 1024 * 1024, private
                 TextAlignment.END -> Layout.Alignment.ALIGN_OPPOSITE
                 else -> Layout.Alignment.ALIGN_NORMAL
             })
-            .setJustificationMode(if (payload.paragraph.alignment == TextAlignment.JUSTIFY) Layout.JUSTIFICATION_MODE_INTER_WORD else Layout.JUSTIFICATION_MODE_NONE)
+            .setJustificationMode(if (payload.paragraph.alignment == TextAlignment.JUSTIFY) android.graphics.text.LineBreaker.JUSTIFICATION_MODE_INTER_WORD else android.graphics.text.LineBreaker.JUSTIFICATION_MODE_NONE)
             .setLineSpacing(payload.paragraph.lineSpacingPt, payload.paragraph.lineSpacingMultiplier)
             .setTextDirection(if (payload.isRtl) TextDirectionHeuristics.RTL else TextDirectionHeuristics.FIRSTSTRONG_LTR)
             .setIncludePad(false).build()

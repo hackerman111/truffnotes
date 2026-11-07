@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicInteger
 internal class AssetsAndGc(
     private val faultController: FaultInjectionController
 ) {
+    private val pendingPublished = ConcurrentHashMap.newKeySet<AssetId>()
     private val activeLeases = ConcurrentHashMap<AssetId, AtomicInteger>()
 
     fun sha256Hex(bytes: ByteArray): String {
@@ -142,6 +143,18 @@ internal class AssetsAndGc(
         return Outcome.Success(lease)
     }
 
+    fun pinAssets(docDir: File, ids: Set<AssetId>): AutoCloseable {
+        ids.forEach { require(assetFile(docDir,it).isFile) { "Missing asset ${it.value}" } }
+        val counters = ids.map { activeLeases.computeIfAbsent(it) { AtomicInteger(0) } }
+        counters.forEach { it.incrementAndGet() }
+        val released = java.util.concurrent.atomic.AtomicBoolean()
+        return AutoCloseable { if (released.compareAndSet(false,true)) counters.forEach { it.decrementAndGet() } }
+    }
+
+    fun retainPending(ids: Collection<AssetId>) { pendingPublished.addAll(ids) }
+
+    fun committed(ids: Collection<AssetId>) { pendingPublished.removeAll(ids.toSet()) }
+
     fun activeLeaseCount(assetId: AssetId): Int {
         return activeLeases[assetId]?.get() ?: 0
     }
@@ -171,7 +184,7 @@ internal class AssetsAndGc(
                     val isReferenced = candidateId in referencedAssets
                     val isPinned = candidateId in pinnedAssets
                     val isLeased = activeLeaseCount(candidateId) > 0
-                    if (!isReferenced && !isPinned && !isLeased) {
+                    if (!isReferenced && !isPinned && !isLeased && candidateId !in pendingPublished) {
                         val len = file.length()
                         if (file.delete()) {
                             deletedAssets++

@@ -9,6 +9,18 @@ import kotlin.test.*
 class LibraryTest {
     @TempDir lateinit var dir: Path
 
+    @Test fun collectionPublicationIsAtomicAndValidatesHierarchy() {
+        val file=dir.resolve("collection.json").toFile()
+        val library=LibraryService(file)
+        val batch=listOf(LibraryEntry("folder","Folder",isFolder=true),LibraryEntry("one","One","folder"),LibraryEntry("two","Two","folder",template=true))
+        assertTrue(library.submit(LibraryAction.Import(batch)).isSuccess)
+        assertEquals(batch,LibraryService(file).entries())
+        val before=file.readBytes()
+        assertFalse(library.submit(LibraryAction.Import(listOf(LibraryEntry("new","New"),LibraryEntry("bad","Bad","missing")))).isSuccess)
+        assertContentEquals(before,file.readBytes())
+        assertFalse(library.submit(LibraryAction.Import(batch)).isSuccess)
+        assertContentEquals(before,file.readBytes())
+    }
     @Test fun operationsPersistAndBulkIsAtomic() {
         val file = dir.resolve("library.json").toFile()
         val library = LibraryService(file)

@@ -124,7 +124,7 @@ class BaselineSessionController(
     fun dispatchInputBatch(batch: ImmutableInputBatch): Outcome<RequestId, SubmitError> {
         val startNs = System.nanoTime()
         val currentState = uiState
-        if (currentState.isInputBlockedByOverflow || currentState.viewport?.isReadOnly == true) {
+        if (currentState.isInputBlockedByOverflow) {
             val status = currentState.saveStatus
             callbackTracker.recordDurationNanos(System.nanoTime() - startNs)
             return Outcome.Failure(

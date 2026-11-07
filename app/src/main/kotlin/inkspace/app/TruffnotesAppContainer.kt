@@ -37,10 +37,9 @@ class TruffnotesAppContainer private constructor(
     val notebooks: NotebookGateway
 ) {
     fun resolveActiveSession(): SessionKey? {
-        val uiSession = controller.uiState.activeSession
-        if (uiSession != null) return uiSession
-        val activeDoc = notebooks.workspace().active?.documentId ?: return null
-        return runtime.activeSessionFor(activeDoc)
+        val activeDoc = notebooks.workspace().active?.documentId
+        if (activeDoc != null) return runtime.activeSessionFor(activeDoc)
+        return controller.uiState.activeSession
     }
 
     fun bindDrawingSurface(surface: android.view.Surface) {
@@ -92,6 +91,7 @@ class TruffnotesAppContainer private constructor(
     fun onSurfaceDestroyed(session: SessionKey? = surfaceSession): SurfaceEpoch? {
         if (session == null) return null
         val ownedEpoch = surfaceEpochs.remove(session) ?: return null
+        cancelDrawing(session)
         runtime.unbindDrawingSurface(session)
         if (session != surfaceSession) {
             runtime.trySend(AppCommand.DetachSurface(session, ownedEpoch))
@@ -167,12 +167,20 @@ class TruffnotesAppContainer private constructor(
         }
 
         return try {
-            controller.dispatchInputBatch(leased.batch)
+            val accepted = controller.dispatchInputBatch(leased.batch)
+            if (accepted is Outcome.Failure) accepted
+            else runtime.submitInkBatch(inkspace.core.ink.InputBatch.fromImmutableBatch(leased.batch))
         } finally {
             leased.close()
         }
     }
 
+    fun cancelDrawing(session: SessionKey? = resolveActiveSession()) {
+        if (session == null) return
+        val batch = inkspace.core.ink.InputBatch.fromSamples(session, 0, inputTransport.nextSequenceNumber(), InputActionKind.CANCEL,
+            listOf(inkspace.core.ink.RealSample(0f, 0f, .5f, 0f, android.os.SystemClock.uptimeMillis()))).getOrNull() ?: return
+        runtime.submitInkBatch(batch)
+    }
     fun submitMotionEvent(event: MotionEvent): Outcome<RequestId, SubmitError> {
         val session = resolveActiveSession()
             ?: return Outcome.Failure(SubmitError.StaleSession("none", "No active session"))
@@ -237,7 +245,7 @@ class TruffnotesAppContainer private constructor(
                             controller = controller,
                             notebooks = WorkspaceGateway(File(config.storageRootPath, "library.json"), rt,
                                 featureDispatch=rt::performNotebookAction,featureState=rt::notebookState,
-                                thumbnailProvider=rt::notebookThumbnail,copyNotebook=rt::copyNotebook) { controller.uiState.activeSession }
+                                thumbnailProvider=rt::notebookThumbnail,copyNotebook=rt::copyNotebook,pdfQuery=rt::queryPdf) { controller.uiState.activeSession }
                         )
                     )
                 }

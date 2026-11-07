@@ -10,6 +10,7 @@ import inkspace.core.ports.PdfRequest
 import inkspace.core.unit.DocPoint
 import inkspace.core.unit.DocRect
 import inkspace.pdf.PdfPageTransform
+import inkspace.pdf.resolvePdfPageBox
 import inkspace.pdf.tileByteSize
 import io.legere.pdfiumandroid.PdfDocument
 import io.legere.pdfiumandroid.PdfPage
@@ -120,9 +121,8 @@ internal class PdfiumBinding : AutoCloseable {
     }
 
     private fun transform(page: PdfPage): PdfPageTransform {
-        val crop = page.getPageCropBox() ?: page.getPageMediaBox()
-        requireNotNull(crop)
-        val box = DocRect(minOf(crop.left, crop.right).toDouble(), minOf(crop.top, crop.bottom).toDouble(), maxOf(crop.left, crop.right).toDouble(), maxOf(crop.top, crop.bottom).toDouble())
+        fun normalized(rect: RectF) = DocRect(minOf(rect.left, rect.right).toDouble(), minOf(rect.top, rect.bottom).toDouble(), maxOf(rect.left, rect.right).toDouble(), maxOf(rect.top, rect.bottom).toDouble())
+        val box = resolvePdfPageBox(normalized(page.getPageCropBox()), normalized(page.getPageMediaBox()))
         val rotation = page.getPageRotation()
         return PdfPageTransform(box, if (rotation in 0..3) rotation * 90 else rotation)
     }

@@ -1,0 +1,173 @@
+{
+  "mupdf_version": "1.27.1",
+  "results": [
+    {
+      "file": "flattened.pdf",
+      "pages": 2,
+      "qpdf_exit": 0,
+      "poppler_exit": 0,
+      "mupdf_pixels": [
+        400,
+        400
+      ],
+      "annotations": [],
+      "links": [
+        {
+          "kind": 4,
+          "xref": 13,
+          "from": "Rect(20.0, 150.0, 60.0, 180.0)",
+          "page": "2",
+          "view": "Fit",
+          "id": ""
+        }
+      ],
+      "outline": [
+        [
+          1,
+          "Second page",
+          2
+        ]
+      ],
+      "text": "",
+      "paths": 3,
+      "images": 0,
+      "rotated_crop_mean_pixel_difference": null
+    },
+    {
+      "file": "source-annotations-flattened.pdf",
+      "pages": 1,
+      "qpdf_exit": 0,
+      "poppler_exit": 0,
+      "mupdf_pixels": [
+        400,
+        400
+      ],
+      "annotations": [],
+      "links": [],
+      "outline": [],
+      "text": "",
+      "paths": 6,
+      "images": 0,
+      "rotated_crop_mean_pixel_difference": null
+    },
+    {
+      "file": "source-rotated-crop.pdf",
+      "pages": 1,
+      "qpdf_exit": 0,
+      "poppler_exit": 0,
+      "mupdf_pixels": [
+        440,
+        600
+      ],
+      "annotations": [],
+      "links": [],
+      "outline": [],
+      "text": "Rotated crop\n",
+      "paths": 1,
+      "images": 0,
+      "rotated_crop_mean_pixel_difference": 0.001821969696969697
+    },
+    {
+      "file": "source-text-affine.pdf",
+      "pages": 1,
+      "qpdf_exit": 0,
+      "poppler_exit": 0,
+      "mupdf_pixels": [
+        600,
+        600
+      ],
+      "annotations": [],
+      "links": [
+        {
+          "kind": 2,
+          "xref": 10,
+          "from": "Rect(58.5, 64.0, 151.0, 107.0)",
+          "uri": "https://example.org/",
+          "id": ""
+        }
+      ],
+      "outline": [
+        [
+          1,
+          "First page",
+          1
+        ]
+      ],
+      "text": "Hello PDF\n",
+      "paths": 2,
+      "images": 0,
+      "rotated_crop_mean_pixel_difference": null
+    },
+    {
+      "file": "standard-types.pdf",
+      "pages": 1,
+      "qpdf_exit": 0,
+      "poppler_exit": 0,
+      "mupdf_pixels": [
+        400,
+        400
+      ],
+      "annotations": [
+        [
+          0,
+          "Text"
+        ],
+        [
+          4,
+          "Square"
+        ],
+        [
+          5,
+          "Circle"
+        ],
+        [
+          15,
+          "Ink"
+        ]
+      ],
+      "links": [],
+      "outline": [],
+      "text": "",
+      "paths": 5,
+      "images": 0,
+      "rotated_crop_mean_pixel_difference": null
+    },
+    {
+      "file": "standard.pdf",
+      "pages": 2,
+      "qpdf_exit": 0,
+      "poppler_exit": 0,
+      "mupdf_pixels": [
+        400,
+        400
+      ],
+      "annotations": [
+        [
+          15,
+          "Ink"
+        ]
+      ],
+      "links": [
+        {
+          "kind": 4,
+          "xref": 12,
+          "from": "Rect(20.0, 150.0, 60.0, 180.0)",
+          "page": "2",
+          "view": "Fit",
+          "id": ""
+        }
+      ],
+      "outline": [
+        [
+          1,
+          "Second page",
+          2
+        ]
+      ],
+      "text": "",
+      "paths": 3,
+      "images": 0,
+      "rotated_crop_mean_pixel_difference": null
+    }
+  ]
+}

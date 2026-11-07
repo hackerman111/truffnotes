@@ -70,3 +70,9 @@ project(":tn-workspace").projectDir = file("modules/tn-workspace")
 
 include(":tn-pdf")
 project(":tn-pdf").projectDir = file("modules/tn-pdf")
+
+include(":tn-exchange")
+project(":tn-exchange").projectDir = file("modules/tn-exchange")
+
+include(":tn-media")
+project(":tn-media").projectDir = file("modules/tn-media")

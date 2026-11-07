@@ -46,6 +46,13 @@ fun NotebookShell(
     onCamera: (Boolean) -> Unit = {},
     onClipboardImage: (Boolean) -> Unit = {},
     textEditorFactory: ((android.content.Context, String?) -> android.view.View?)? = null,
+    onImportNative: (Boolean) -> Unit = {},
+    onExport: (String) -> Unit = {},
+    onImportCollection: () -> Unit = {},
+    onExportCollection: (Set<String>) -> Unit = {},
+    onPickColor: () -> Unit = {},
+    timerFactory: (TimerSnapshot) -> AccessoryTimer,
+    zoomContent: @Composable (ZoomViewState) -> Unit = {},
     editor: @Composable () -> Unit
 ) {
     val scope = rememberCoroutineScope()
@@ -67,8 +74,14 @@ fun NotebookShell(
     var templateId by remember { mutableStateOf<String?>(null) }
     var panel by rememberSaveable { mutableStateOf<String?>(null) }
     var libraryMenu by remember { mutableStateOf(false) }
+    var focusToolsVisible by remember { mutableStateOf(true) }
+    var focusActivity by remember { mutableIntStateOf(0) }
+    var focusDialogOpen by remember { mutableStateOf(false) }
+    val accessoryTimer = rememberAccessoryTimer(timerFactory)
     var waitingClose by remember { mutableStateOf<String?>(null) }
     val active = workspace.active
+    val landscapeToolbar = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val toolbarLayout = if (landscapeToolbar) active?.settings?.landscapeToolbar ?: ToolbarLayout() else active?.settings?.portraitToolbar ?: ToolbarLayout()
     val settings = if (showLibrary) workspace.globalSettings else active?.settings ?: workspace.globalSettings
 
     suspend fun refreshEntries() {
@@ -111,6 +124,9 @@ fun NotebookShell(
             active?.focus == true -> dispatch(ViewAction.Command("focus"))
             else -> showLibrary = true
         }
+    }
+    LaunchedEffect(active?.focus, focusToolsVisible, toolbarLayout.autoHide, focusActivity, focusDialogOpen) {
+        if (active?.focus == true && focusToolsVisible && toolbarLayout.autoHide && !focusDialogOpen) { delay(4000); focusToolsVisible = false }
     }
     LaunchedEffect(active?.id) { panel = active?.settings?.panel }
     LaunchedEffect(section) { selected = emptySet(); refreshEntries() }
@@ -166,12 +182,15 @@ fun NotebookShell(
                         DropdownMenuItem(text = { Text("Notebook") }, onClick = { libraryMenu = false; openCreate() })
                         DropdownMenuItem(text = { Text("Folder") }, onClick = { libraryMenu = false; name = "Folder"; dialog = "new-folder" })
                         DropdownMenuItem(text = { Text("From Template") }, onClick = { libraryMenu = false; sectionName = LibrarySection.TEMPLATES.name })
+                        DropdownMenuItem(text = { Text("Import collection") }, onClick = { libraryMenu=false; onImportCollection() })
+                        DropdownMenuItem(text = { Text("Import native") }, onClick = { libraryMenu = false; onImportNative(true) })
                         DropdownMenuItem(text = { Text("Import PDF") }, onClick = { libraryMenu = false; onImportPdf(true) })
                         DropdownMenuItem(text = { Text("Import Image") }, onClick = { libraryMenu = false; onImportImage(true) })
                         DropdownMenuItem(text = { Text("Camera") }, onClick = { libraryMenu = false; onCamera(true) })
                         DropdownMenuItem(text = { Text("Paste Image") }, onClick = { libraryMenu = false; onClipboardImage(true) })
                     }
                 }
+                TextButton(onClick = { onExportCollection(entries.filter { !it.isFolder && !it.trashed && (selected.isEmpty() || it.id in selected) }.map { it.id }.toSet()) }, enabled=entries.any { !it.isFolder }) { Text("Export collection") }
                 TextButton(onClick = { grid = !grid }) { Text(if (grid) "List" else "Grid") }
                 TextButton(onClick = { dialog = "settings" }) { Text("Settings") }
             }
@@ -206,18 +225,21 @@ fun NotebookShell(
                 items(visible, key = { it.id }) { entry -> LibraryTile(entry, gateway, entry.id in selected, settings.listScale, false, { onEntry(entry) }, { onLongEntry(entry) }) }
             }
         } else {
-            if (active?.focus != true) {
-                NotebookToolbar(document, active, onCommand = ::dispatch, onPerform = ::perform,
+            if (active?.focus != true && !toolbarLayout.dockBottom) {
+                NotebookToolbar(document, active?.copy(tool = document.tool), onCommand = ::dispatch, onPerform = ::perform,
                     onPanel = { panel = if (panel == it) null else it; perform(NotebookAction.Settings(settings.copy(panel = panel))) },
                     onText = { name = ""; dialog = "insert-text" }, onImage = { onImportImage(false) },
                     onSettings = { dialog = "settings" })
-            } else TextButton(onClick = { dispatch(ViewAction.Command("focus")) }) { Text("Exit Focus") }
+            } else if (active?.focus == true) Row(Modifier.fillMaxWidth(), horizontalArrangement = if (toolbarLayout.focusSide == "right") Arrangement.End else Arrangement.Start) { TextButton(onClick = { dispatch(ViewAction.Command("focus")) }) { Text("Exit Focus") }; TextButton(onClick = { focusToolsVisible = !focusToolsVisible; focusActivity++ }) { Text(if (focusToolsVisible) "Hide tools" else "Show tools") } }
+            if (active?.focus != true) F15Controls(active?.copy(tool = document.tool), settings, ::dispatch, { perform(NotebookAction.Settings(it)) }, onImportPdf = { onImportPdf(false) }, onImportNative = { onImportNative(false) }, onExport = onExport, gateway = gateway, onPickColor = onPickColor, timer = accessoryTimer, onPanelVisible = { focusDialogOpen = it })
+            active?.zoom?.let { zoom -> ZoomWindow(zoom, ::dispatch, document.snapshot?.pages?.find { it.id.value == document.activePageId }?.widthPt ?: 595.28, zoomContent) }
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
                 val dock = maxWidth >= 900.dp && settings.panelDocked
                 Row(Modifier.fillMaxSize()) {
                     if (panel != null && dock && active?.focus != true) NotebookSidebar(panel!!, document, ::perform, { kind, id, old -> name = old; dialog = "$kind:$id" }, Modifier.width(280.dp).fillMaxHeight())
                     Box(Modifier.weight(1f).fillMaxHeight()) {
                         editor()
+                        active?.zoom?.let { ZoomRegionIndicator(it, active.camera) }
                         if (active?.tool == "text" && active.readOnly != true && textEditorFactory != null) {
                             val textId = document.selectedIds.firstOrNull { id ->
                                 when (val payload = document.snapshot?.directory?.getObject(inkspace.core.id.ObjectId(id))?.payload) {
@@ -253,10 +275,21 @@ fun NotebookShell(
                         }
                     }
                 }
+                if (active?.focus == true && focusToolsVisible) Surface(Modifier.width(220.dp).heightIn(max = 380.dp).align(if (toolbarLayout.focusSide == "right") Alignment.CenterEnd else Alignment.CenterStart), shadowElevation = 8.dp) {
+                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                        toolbarLayout.visibleTools().forEach { tool -> TextButton({ dispatch(ViewAction.Command(tool)); focusToolsVisible = true; focusActivity++ }) { Text(if (document.tool == tool) "● $tool" else tool) } }
+                        TextButton({ dispatch(ViewAction.Command("undo")) }) { Text("Undo") }
+                        TextButton({ dispatch(ViewAction.Command("redo")) }) { Text("Redo") }
+                        F15Controls(active?.copy(tool = document.tool), settings, ::dispatch, { perform(NotebookAction.Settings(it)) }, onImportPdf = { onImportPdf(false) }, onImportNative = { onImportNative(false) }, onExport = onExport, gateway = gateway, onPickColor = onPickColor, timer = accessoryTimer, onPanelVisible = { focusDialogOpen = it })
+                    }
+                }
                 if (panel != null && !dock && active?.focus != true) Surface(Modifier.width(300.dp).fillMaxHeight().align(Alignment.CenterStart), tonalElevation = 4.dp, shadowElevation = 8.dp) {
                     Column { TextButton(onClick = { panel = null; perform(NotebookAction.Settings(settings.copy(panel = null))) }) { Text("Close panel") }; NotebookSidebar(panel!!, document, ::perform, { kind, id, old -> name = old; dialog = "$kind:$id" }, Modifier.fillMaxSize()) }
                 }
             }
+            if (active?.focus != true && toolbarLayout.dockBottom) NotebookToolbar(document, active?.copy(tool = document.tool), ::dispatch, ::perform,
+                { panel = if (panel == it) null else it; perform(NotebookAction.Settings(settings.copy(panel = panel))) },
+                { name = ""; dialog = "insert-text" }, { onImportImage(false) }, { dialog = "settings" })
         }
     }
 
@@ -293,6 +326,10 @@ fun NotebookShell(
         dialog == "new-notebook" -> AlertDialog(onDismissRequest = { dialog = null }, title = { Text("Create notebook") }, text = {
             Column(Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState())) {
                 OutlinedTextField(name, { name = it }, singleLine = true, label = { Text("Name") })
+                if(templateId != null) {
+                    Text("Template preview uses one page. The default is the first page; choose another page below.")
+                    OutlinedTextField(defaults.templatePage.toString(), { value -> value.toIntOrNull()?.takeIf {it>0}?.let {defaults=defaults.copy(templatePage=it)} },label={Text("Template page")})
+                }
                 NotebookDefaultsForm(defaults) { defaults = it }
             }
         }, confirmButton = { TextButton(enabled = name.isNotBlank(), onClick = {
@@ -379,18 +416,22 @@ private fun TabStrip(workspace: WorkspaceState, entries: List<LibraryEntry>, onL
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NotebookToolbar(document: NotebookDocumentState, active: TabState?, onCommand: (ViewAction) -> Unit, onPerform: (NotebookAction) -> Unit, onPanel: (String) -> Unit, onText: () -> Unit, onImage: () -> Unit, onSettings: () -> Unit) {
-    val tools = listOf("pen", "fountain", "pencil", "brush", "highlighter", "eraser", "lasso", "shape", "ruler", "text", "image", "sticky", "tape")
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val layout = if (landscape) active?.settings?.landscapeToolbar ?: ToolbarLayout() else active?.settings?.portraitToolbar ?: ToolbarLayout()
+    val tools = layout.visibleTools()
+    var overflow by remember { mutableStateOf(false) }
     LazyRow(Modifier.fillMaxWidth().testTag("notebook-tools")) {
-        item { TextButton(onClick = { onCommand(ViewAction.Command("undo")) }) { Text("Undo") } }
-        item { TextButton(onClick = { onCommand(ViewAction.Command("redo")) }) { Text("Redo") } }
+        if (!layout.undoAtEnd) { item { TextButton(onClick = { onCommand(ViewAction.Command("undo")) }) { Text("Undo") } }; item { TextButton(onClick = { onCommand(ViewAction.Command("redo")) }) { Text("Redo") } } }
         items(tools) { tool ->
             val selected = active?.tool == tool
             Surface(color = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface, modifier = Modifier.padding(4.dp).combinedClickable(onClick = {
                 if (selected && tool != "text" && tool != "image") onSettings() else {
                     onCommand(ViewAction.Command(tool)); if (tool == "text") onText(); if (tool == "image") onImage()
                 }
-            }, onLongClick = onSettings)) { Text(tool.replaceFirstChar { it.uppercase() }, Modifier.padding(12.dp)) }
+            }, onLongClick = onSettings)) { Text(tool.replaceFirstChar { it.uppercase() }, Modifier.padding(if (layout.compact) 4.dp else 12.dp).heightIn(min = layout.sizeDp.dp)) }
         }
+        if (layout.undoAtEnd) { item { TextButton(onClick = { onCommand(ViewAction.Command("undo")) }) { Text("Undo") } }; item { TextButton(onClick = { onCommand(ViewAction.Command("redo")) }) { Text("Redo") } } }
+        item { Box { TextButton({ overflow = true }) { Text("More tools") }; DropdownMenu(overflow, { overflow = false }) { NOTEBOOK_TOOLS.filter { it !in tools }.forEach { tool -> DropdownMenuItem(text = { Text(tool) }, onClick = { overflow = false; onCommand(ViewAction.Command(tool)) }) } } } }
         item { TextButton(onClick = { onCommand(ViewAction.Command("readonly")) }) { Text(if (active?.readOnly == true) "Read only" else "Edit") } }
         item { TextButton(onClick = { onCommand(ViewAction.Command("focus")) }) { Text("Focus") } }
         items(listOf("Pages", "Outline", "Bookmarks", "Layers")) { name -> TextButton(onClick = { onPanel(name) }) { Text(name) } }

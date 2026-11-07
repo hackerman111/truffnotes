@@ -22,6 +22,8 @@ import inkspace.core.limits.Limits
 import inkspace.core.model.DocumentKind
 import inkspace.core.model.DocumentSnapshot
 import inkspace.core.model.DocumentState
+import inkspace.core.model.SnapshotMetadata
+import inkspace.core.model.restoreSnapshot
 import inkspace.core.model.LayerDescriptor
 import inkspace.core.model.PageDescriptor
 import inkspace.core.model.SceneObject
@@ -114,7 +116,7 @@ class DocumentStore(
                 is StorageRequest.Open -> handleOpen(request)
                 is StorageRequest.Read -> handleRead(request)
                 is StorageRequest.StageDraftChunk -> handleStageDraftChunk(request)
-                is StorageRequest.Commit -> handleCommit(request)
+                is StorageRequest.Commit -> handleCommit(request).also { if(it.isSuccess) assetsAndGc.committed(request.stagedAssets.map { asset -> asset.assetId } + request.writeSet?.referencedAssets.orEmpty()) }
                 is StorageRequest.Flush -> handleFlush(request)
                 is StorageRequest.Close -> handleClose(request)
                 is StorageRequest.Backup -> handleBackup(request)
@@ -220,7 +222,22 @@ class DocumentStore(
 
         val kind = runCatching { DocumentKind.valueOf(existingMeta.first) }.getOrDefault(DocumentKind.Notebook)
         val expectedDurableRev = existingMeta.second
-        val state = DocumentState.createInitial(documentId = documentId, kind = kind)
+        val hasCheckpoint = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='native_checkpoint_metadata'").use { it.step() }
+        val state = if (hasCheckpoint) {
+            val metadata = conn.prepare("SELECT encoded_cbor FROM native_checkpoint_metadata WHERE singleton=1").use { st ->
+                if (!st.step()) throw StorageDatabaseCorruptException("Missing native checkpoint")
+                CoreCodec.decodeFromCbor<SnapshotMetadata>(st.getBlob(0)).getOrNull()
+                    ?: throw StorageDatabaseCorruptException("Invalid native checkpoint metadata")
+            }
+            if (metadata.version.document != documentId) throw StorageDatabaseCorruptException("Checkpoint document mismatch")
+            val snapshot = conn.prepare("SELECT encoded_cbor FROM native_checkpoint_records ORDER BY ordinal").use { st ->
+                restoreSnapshot(metadata, sequence {
+                    while (st.step()) yield(CoreCodec.decodeFromCbor<SceneObject>(st.getBlob(0)).getOrNull()
+                        ?: throw StorageDatabaseCorruptException("Invalid checkpoint object"))
+                })
+            }
+            DocumentState.fromSnapshot(snapshot)
+        } else DocumentState.createInitial(documentId = documentId, kind = kind)
 
         val encodedWriteSets = ArrayList<ByteArray>()
         conn.prepare(
@@ -528,10 +545,12 @@ class DocumentStore(
 
     private fun syncSceneObjects(conn: SQLiteConnection, state: DocumentState, writeSet: WriteSet?) {
         if (writeSet == null) return
+        syncSceneObjectsById(conn, state, writeSet.records.filter { it.entityKind.equals("object",ignoreCase=true) }.map { ObjectId(it.entityId) })
+    }
+
+    private fun syncSceneObjectsById(conn: SQLiteConnection, state: DocumentState, ids: List<ObjectId>) {
         val snap = state.snapshot()
-        for (rec in writeSet.records) {
-            if (!rec.entityKind.equals("object", ignoreCase = true)) continue
-            val objId = ObjectId(rec.entityId)
+        for (objId in ids) {
             val currentObj = snap.directory.getObject(objId)
             if (currentObj == null) {
                 conn.prepare("DELETE FROM scene_objects WHERE object_id = ?").use { st ->
@@ -809,6 +828,51 @@ class DocumentStore(
 
     // --- Inspection & helper methods for contract tests and History spill ---
 
+    fun retainPendingAssets(ids: Collection<AssetId>) { assetsAndGc.retainPending(ids) }
+
+    fun pinAssets(documentId: DocumentId, assets: Set<AssetId>): AutoCloseable = writerLock.withLock {
+        assetsAndGc.pinAssets(docDirectory(documentId), assets)
+    }
+
+    /** WAL read transaction freezes rows without copying the database or taking the writer lock during export. */
+    fun acquireSnapshot(documentId: DocumentId): inkspace.core.ports.FrozenStorageSnapshot = writerLock.withLock {
+        val session = requireNotNull(sessions[documentId]) { "Document is not open" }
+        val snapshot = session.state.snapshot()
+        val connection = driver.open(session.dbFile.absolutePath)
+        var pins: AutoCloseable? = null
+        try {
+            connection.execSQL("BEGIN")
+            connection.prepare("SELECT durable_revision FROM document_meta WHERE document_id = ?").use {
+                it.bindText(1,documentId.value); check(it.step() && it.getLong(0) == snapshot.version.revision.value)
+            }
+            val assets = snapshot.referencedAssets()
+            pins = assetsAndGc.pinAssets(session.docDir,assets)
+            val heldPins = pins
+            object : inkspace.core.ports.FrozenStorageSnapshot {
+                private val closed = java.util.concurrent.atomic.AtomicBoolean()
+                override val metadata = SnapshotMetadata(snapshot.version,snapshot.kind,snapshot.pages,snapshot.layers)
+                override val objectCount = snapshot.totalObjectCount
+                override val assets = assets
+                override fun records(): Sequence<SceneObject> = sequence {
+                    check(!closed.get())
+                    connection.prepare("SELECT encoded_cbor FROM scene_objects ORDER BY object_id ASC").use { statement ->
+                        while (statement.step()) {
+                            check(!closed.get())
+                            yield(requireNotNull(CoreCodec.decodeFromCbor<SceneObject>(statement.getBlob(0)).getOrNull()))
+                        }
+                    }
+                }
+                override fun asset(id: AssetId): java.io.InputStream {
+                    check(!closed.get()); require(id in assets)
+                    return assetsAndGc.assetFile(session.docDir,id).inputStream()
+                }
+                override fun close() { if (closed.compareAndSet(false,true)) {
+                    try { connection.execSQL("ROLLBACK") } finally { try { connection.close() } finally { heldPins.close() } }
+                } }
+            }
+        } catch (error: Exception) { pins?.close(); connection.close(); throw error }
+    }
+
     fun inspectPragmas(documentId: DocumentId): SqlitePragmaReport {
         return writerLock.withLock {
             val session = sessions[documentId]
@@ -835,6 +899,63 @@ class DocumentStore(
         return writerLock.withLock {
             val session = sessions[documentId] ?: return@withLock false
             SchemaAndMigrate.verifyIntegrity(session.connection)
+        }
+    }
+
+    /** Installs an already validated import into a new private directory; never overwrites a document. */
+    fun installSnapshot(snapshot: DocumentSnapshot, openAsset: (AssetId) -> java.io.InputStream): Outcome<Unit, StorageError> = writerLock.withLock {
+        val id = snapshot.version.document
+        if (!id.value.matches(Regex("[A-Za-z0-9_-]{1,128}")))
+            return@withLock Outcome.Failure(StorageError.IoFailure("Unsafe imported document ID"))
+        val target = docDirectory(id)
+        if (target.exists() || sessions.containsKey(id)) return@withLock Outcome.Failure(StorageError.IoFailure("Document already exists"))
+        val staging = File(target.parentFile, ".native-import-${java.util.UUID.randomUUID()}")
+        try {
+            val checked = restoreSnapshot(SnapshotMetadata(snapshot.version,snapshot.kind,snapshot.pages,snapshot.layers), snapshot.orderedSceneObjects().asSequence())
+            require(checked.totalObjectCount == snapshot.totalObjectCount)
+            require(staging.mkdirs()) { "Cannot create import staging directory" }
+            for (asset in checked.referencedAssets()) {
+                val hex = asset.value.removePrefix("sha256:")
+                require(hex.matches(Regex("[a-f0-9]{64}"))) { "Native asset ID must be content addressed" }
+                val file = assetsAndGc.assetFile(staging,asset)
+                file.parentFile?.mkdirs()
+                val digest=java.security.MessageDigest.getInstance("SHA-256")
+                openAsset(asset).use { input -> FileOutputStream(file).use { output ->
+                    val buffer=ByteArray(32768)
+                    while(true) { val n=input.read(buffer);if(n<0) break;require(n>0);output.write(buffer,0,n);digest.update(buffer,0,n) }
+                    output.flush();output.fd.sync()
+                } }
+                require(digest.digest().joinToString("") { "%02x".format(it.toInt() and 255) } == hex) { "Asset digest mismatch" }
+            }
+            driver.open(File(staging,"document.sqlite").absolutePath).use { conn ->
+                SchemaAndMigrate.configureAndMigrate(conn)
+                conn.execSQL("BEGIN IMMEDIATE TRANSACTION")
+                try {
+                    conn.prepare("INSERT INTO document_meta(document_id,document_kind,durable_revision,updated_at_ms) VALUES (?,?,?,?)").use { st ->
+                        st.bindText(1,id.value);st.bindText(2,checked.kind.name);st.bindLong(3,checked.version.revision.value);st.bindLong(4,System.currentTimeMillis());st.step()
+                    }
+                    conn.execSQL("CREATE TABLE native_checkpoint_metadata(singleton INTEGER PRIMARY KEY CHECK(singleton=1),encoded_cbor BLOB NOT NULL)")
+                    conn.execSQL("CREATE TABLE native_checkpoint_records(ordinal INTEGER PRIMARY KEY,encoded_cbor BLOB NOT NULL)")
+                    conn.prepare("INSERT INTO native_checkpoint_metadata VALUES (1,?)").use { st ->
+                        st.bindBlob(1,CoreCodec.encodeToCbor(SnapshotMetadata(checked.version,checked.kind,checked.pages,checked.layers)));st.step()
+                    }
+                    checked.orderedSceneObjects().forEachIndexed { index,obj -> conn.prepare("INSERT INTO native_checkpoint_records VALUES (?,?)").use { st ->
+                        st.bindLong(1,index.toLong());st.bindBlob(2,CoreCodec.encodeToCbor(obj));st.step()
+                    } }
+                    val state=DocumentState.fromSnapshot(checked)
+                    syncPagesAndLayers(conn,state)
+                    syncSceneObjectsById(conn,state,checked.orderedSceneObjects().map { it.id })
+                    conn.execSQL("COMMIT")
+                    conn.execSQL("PRAGMA wal_checkpoint(TRUNCATE)")
+                } catch(error:Exception) { runCatching {conn.execSQL("ROLLBACK")};throw error }
+                require(SchemaAndMigrate.verifyIntegrity(conn))
+            }
+            require(!target.exists()) { "Document appeared during import" }
+            java.nio.file.Files.move(staging.toPath(),target.toPath())
+            Outcome.Success(Unit)
+        } catch(error:Exception) {
+            staging.deleteRecursively()
+            Outcome.Failure(StorageError.IoFailure("Native import failed: ${error.message}"))
         }
     }
 

@@ -268,7 +268,7 @@ class Renderer(
                     surfaceEpoch = scene.surfaceEpoch,
                     widthPx = wPt,
                     heightPx = hPt,
-                    needsOffscreenBuffer = true
+                    needsOffscreenBuffer = androidCanvas == null
                 )
                 if (admit is Outcome.Failure) return admit
 
@@ -280,7 +280,8 @@ class Renderer(
                 val prepared = ScenePreparer.prepare(
                     scene = scene.copy(viewportWidthPx = wPt, viewportHeightPx = hPt, camera = pdfCamera),
                     overrideViewportDocRect = request.pageBoundsDoc,
-                    overrideCamera = pdfCamera
+                    overrideCamera = pdfCamera,
+                    objectIds = request.objectIds
                 )
                 val pdfCommands = StringBuilder(256)
                 val replayRes = replayEngine.replay(
@@ -288,20 +289,21 @@ class Renderer(
                     camera = pdfCamera,
                     targetWidthPx = wPt,
                     targetHeightPx = hPt,
-                    computePixels = true,
+                    computePixels = androidCanvas == null,
                     derivedCache = derivedCache,
                     tileCache = tileCache,
                     geometryPort = geometryPort,
                     textPort = textPort,
                     resourcePort = resourcePort,
                     androidCanvas = androidCanvas,
-                    pdfVectorCommandsOut = pdfCommands
+                    pdfVectorCommandsOut = pdfCommands,
+                    includePaper = request.includePaper
                 )
                 val (counters, pixels) = when (replayRes) {
                     is Outcome.Failure -> return replayRes
                     is Outcome.Success -> replayRes.value
                 }
-                val previewPixels = pixels ?: IntArray(wPt * hPt)
+                val previewPixels = pixels ?: IntArray(0)
                 val pdfBytes = CanvasReplay.buildPdfOverlayBytes(wPt, hPt, pdfCommands.toString())
                 val elapsedNs = (System.nanoTime() - startNs).coerceAtLeast(1L)
                 val stats = buildFrameStats(

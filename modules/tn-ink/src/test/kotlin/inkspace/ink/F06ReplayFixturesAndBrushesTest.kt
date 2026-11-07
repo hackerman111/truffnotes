@@ -50,6 +50,16 @@ class F06ReplayFixturesAndBrushesTest {
         activeLayerId = LayerId("layer-1")
     )
 
+    @Test fun palm_posture_applies_to_recent_pen_and_active_pen_always_wins() {
+        val finger = InputBatch.fromSamples(session = session, pointerId = 2, sequenceNumber = 2L,
+            action = InputActionKind.DOWN, toolType = InputToolType.FINGER,
+            realSamples = listOf(RealSample(20f, 10f, .5f, 0f, 110L))).getOrNull()!!
+        val ctx = baseCtx.copy(policy = StylusInputPolicy(palmPosture = inkspace.core.ink.PalmPosture.LEFT_OF_PEN))
+        assertEquals(EffectiveInkToolMode.DRAW, InkToolArbiter.classifyToolMode(finger, ctx, false, 100L, 10f to 10f))
+        assertEquals(EffectiveInkToolMode.PALM_REJECTED, InkToolArbiter.classifyToolMode(finger, ctx, true, 100L, 10f to 10f))
+        assertEquals(EffectiveInkToolMode.PALM_REJECTED, InkToolArbiter.classifyToolMode(finger, ctx.copy(policy = ctx.policy.copy(palmPosture = inkspace.core.ink.PalmPosture.RIGHT_OF_PEN)), false, 100L, 10f to 10f))
+    }
+
     @Test
     fun historical_points_and_prediction_replaced_preserve_only_real_samples_in_exact_order() {
         val engine = InkEngine()

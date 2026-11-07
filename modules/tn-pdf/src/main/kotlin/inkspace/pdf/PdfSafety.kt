@@ -84,3 +84,10 @@ fun stagePdf(input: InputStream, destination: File, maxBytes: Long = 268_435_456
         throw failure
     }
 }
+
+/** PDFium reports an absent box with a non-null zero-area sentinel. */
+fun resolvePdfPageBox(crop: inkspace.core.unit.DocRect, media: inkspace.core.unit.DocRect): inkspace.core.unit.DocRect {
+    if (crop.width > 0 && crop.height > 0) return crop
+    require(media.width > 0 && media.height > 0) { "PDF page has no valid CropBox or MediaBox" }
+    return media
+}

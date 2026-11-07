@@ -35,10 +35,12 @@ import kotlin.math.max
 class InkEngine(
     private val spoolSink: StrokeSpoolSink = InMemoryStrokeSpoolSink()
 ) {
+    private val strokeNamespace = java.util.UUID.randomUUID().toString()
     private val strokeEpochGen = AtomicLong(1L)
     private val activePointers = LinkedHashMap<Int, ActivePointerStrokeState>()
     private val navigationAnchors = LinkedHashMap<Int, DocPoint>()
     private var lastStylusActivityTimestampMs: Long = Long.MIN_VALUE
+    private var lastStylusPoint: Pair<Float, Float>? = null
 
     @Synchronized
     fun activePointerCount(): Int = activePointers.size
@@ -60,6 +62,7 @@ class InkEngine(
         if (batch.toolType == InputToolType.STYLUS || batch.toolType == InputToolType.ERASER) {
             val lastTs = batch.realTimestampMs(batch.realSampleCount - 1)
             lastStylusActivityTimestampMs = max(lastStylusActivityTimestampMs, lastTs)
+            lastStylusPoint = batch.realX(batch.realSampleCount - 1) to batch.realY(batch.realSampleCount - 1)
         }
 
         // 1. Handle global ACTION_CANCEL vs per-pointer FLAG_CANCELED
@@ -114,7 +117,8 @@ class InkEngine(
             batch = batch,
             ctx = ctx,
             hasOtherActiveStylusPointer = hasOtherActiveStylus,
-            lastStylusTimestampMs = lastStylusActivityTimestampMs
+            lastStylusTimestampMs = lastStylusActivityTimestampMs,
+            lastStylusPoint = lastStylusPoint
         )
 
         // 2. HOVER
@@ -217,8 +221,12 @@ class InkEngine(
             }
         }
 
+        // A terminal event after cancellation or a tool switch must never begin a new stroke.
+        if (existingState == null && batch.action != InputActionKind.DOWN) {
+            return Outcome.Success(InkOutput(batch.pointerId, 0L, EffectiveInkToolMode.CANCELED, batch.capabilityReport))
+        }
         // 5. DRAW / TEMPORARY_ERASER stroke lifecycle (DOWN -> MOVE -> UP)
-        val state = if (batch.action == InputActionKind.DOWN || existingState == null) {
+        val state = if (batch.action == InputActionKind.DOWN) {
             // If a previous state existed on this pointerId without UP, discard its provisional spool
             if (existingState != null) {
                 existingState.residentSamples.clear()
@@ -231,8 +239,8 @@ class InkEngine(
             ActivePointerStrokeState(
                 pointerId = batch.pointerId,
                 strokeEpoch = epoch,
-                strokeId = ObjectId("stroke-p${batch.pointerId}-e$epoch"),
-                gestureId = GestureId("gesture-p${batch.pointerId}-e$epoch"),
+                strokeId = ObjectId("stroke-$strokeNamespace-p${batch.pointerId}-e$epoch"),
+                gestureId = GestureId("gesture-$strokeNamespace-p${batch.pointerId}-e$epoch"),
                 mode = classifiedMode,
                 currentChunkOrigin = firstDocPt,
                 lastSequenceNumber = batch.sequenceNumber,
@@ -242,6 +250,7 @@ class InkEngine(
                 activePointers[batch.pointerId] = it
             }
         } else {
+            val existingState = requireNotNull(existingState)
             if (batch.sequenceNumber <= existingState.lastSequenceNumber) {
                 return Outcome.Failure(
                     InputError.StaleSequence(

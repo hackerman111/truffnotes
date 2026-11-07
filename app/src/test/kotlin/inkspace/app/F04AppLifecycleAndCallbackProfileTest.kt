@@ -212,6 +212,15 @@ class F04AppLifecycleAndCallbackProfileTest {
             stats.maxMs
         )
 
+        // Await the 16 completed warmup strokes and 125 measured strokes before freezing the revision.
+        awaitCondition { container.runtime.latestSnapshot(session)?.totalObjectCount == 142 }
+        container.onBackgroundFlush()
+        awaitCondition {
+            container.syncEvents()
+            container.runtime.latestSaveStatus(session)?.hasUnsavedChanges == false
+        }
+        val completedRevision = container.runtime.latestSnapshot(session)!!.version.revision
+
         // 4. Close first container and cold-reopen from disk using savedBundle
         assertTrue(container.closeAsync().isSuccess)
         awaitCondition {
@@ -232,7 +241,7 @@ class F04AppLifecycleAndCallbackProfileTest {
         }
 
         val restoredSnap = reopenedContainer.controller.uiState.snapshot!!
-        assertEquals(Revision(1L), restoredSnap.version.revision)
+        assertEquals(completedRevision, restoredSnap.version.revision)
         assertTrue(restoredSnap.orderedSceneObjects().any { it.id == ObjectId("stroke-app-1") })
         assertEquals(42.0, reopenedContainer.controller.uiState.viewport?.camera?.translateX ?: 0.0, 1e-6)
 

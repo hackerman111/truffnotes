@@ -96,7 +96,7 @@ class Runtime private constructor(
         GestureArbiter.shapeRecognizer = ShapeRecognizer::recognize
     }
 
-    private class NotebookToolPath {
+    private class NotebookToolPath(val tool: String) {
         val xs=FloatArray(64000);val ys=FloatArray(64000);var count=0
         fun add(x:Float,y:Float):Boolean {if(count==xs.size)return false;xs[count]=x;ys[count]=y;count++;return true}
         fun points()=List(count) { DocPoint(xs[it].toDouble(),ys[it].toDouble()) }
@@ -127,12 +127,14 @@ class Runtime private constructor(
         val activeDraftStrokes = ConcurrentHashMap<Int, DraftStrokeSceneItem>()
         val activeEphemeralOverlays = ConcurrentHashMap<Int, EphemeralOverlayItem>()
         var currentSelectionSet: SelectionSet = SelectionSet()
+        val laser = inkspace.media.LaserOverlay()
         var notebookTool: String = "pen"
         var notebookSettings: EditorSettings = EditorSettings()
         var activeNotebookLayer: LayerId? = null
         val toolPaths = HashMap<Int,NotebookToolPath>()
         val inFlightReservations = LinkedHashMap<Long, PersistReservation>()
         val outOfOrderAckedRevisions = HashSet<Long>()
+        var pendingExportAcquisitions: Int = 0
         var closed: Boolean = false
 
         fun computeSaveStatus(): SaveStatus {
@@ -467,8 +469,39 @@ class Runtime private constructor(
     fun unbindDrawingSurface(session:SessionKey) { androidFeatures?.unbind(session) }
     fun createTextEditorView(context:android.content.Context,session:SessionKey,id:String?):android.view.View? =
         androidFeatures?.createTextEditorView(context,session,id?.let(::ObjectId))
-    fun sceneForRendering(session:SessionKey):inkspace.core.render.Scene? = publishedScenes[session]
+    fun sceneForRendering(session:SessionKey):inkspace.core.render.Scene? {
+        val scene = publishedScenes[session] ?: return null
+        val points = activeSessions[session]?.laser?.visible().orEmpty()
+        if (points.isEmpty()) return scene
+        val origin = DocPoint(points.first().x, points.first().y)
+        return scene.copy(ephemeralOverlays = scene.frozenEphemeralOverlays + inkspace.core.render.EphemeralOverlayItem.LaserTrail(
+            origin, points.map { DocPoint(it.x-origin.x, it.y-origin.y) }))
+    }
+    fun hasLaser(session: SessionKey): Boolean = activeSessions[session]?.laser?.visible()?.isNotEmpty() == true
     fun notebookState(session:SessionKey):NotebookDocumentState = publishedNotebooks[session] ?: NotebookDocumentState(snapshot=latestSnapshot(session))
+    fun renderPreview(session: SessionKey, camera: inkspace.core.unit.CameraTransform, width: Int, height: Int): NotebookThumbnail? =
+        androidFeatures?.renderPreview(session, camera, width, height)
+    fun exportPages(session: SessionKey, snapshot: DocumentSnapshot, uri: android.net.Uri, mode: inkspace.exchange.ExportMode,
+        options: inkspace.core.workspace.ExportOptions = inkspace.core.workspace.ExportOptions(mode=mode.name)): List<String> =
+        requireNotNull(androidFeatures) { "Android exporter unavailable" }.exportPages(session, snapshot, uri, mode, options)
+
+    internal fun showPdfSearchHit(session: SessionKey, bounds: inkspace.core.unit.DocRect?) {
+        changeNotebookView(session) { ctx ->
+            ctx.activeEphemeralOverlays.keys.filter { it == 21000 }.forEach(ctx.activeEphemeralOverlays::remove)
+            if (bounds != null) {
+                cancelDrafts(ctx)
+                ctx.activeEphemeralOverlays[21000] = EphemeralOverlayItem.SelectionBounds(bounds)
+                val camera = ctx.viewport.camera
+                ctx.viewport = ctx.viewport.copy(camera = camera.copy(
+                    translateX = ctx.viewport.widthPx / 2.0 - (bounds.left + bounds.right) / 2 * camera.scale,
+                    translateY = ctx.viewport.heightPx / 2.0 - (bounds.top + bounds.bottom) / 2 * camera.scale))
+                publishedViewports[session] = ctx.viewport
+            }
+        }
+    }
+
+    fun queryPdf(session: SessionKey, query: PdfQuery): Outcome<PdfViewData, FeatureError> =
+        androidFeatures?.queryPdf(session, query) ?: Outcome.Failure(FeatureError.InvalidParameters("PDF reader unavailable"))
     fun notebookThumbnail(documentId:String,maxEdge:Int):Outcome<NotebookThumbnail,FeatureError> =
         androidFeatures?.thumbnail(documentId,maxEdge) ?: Outcome.Failure(FeatureError.InvalidParameters("Android renderer unavailable"))
     override fun activeSessionFor(documentId: String): SessionKey? {
@@ -490,8 +523,13 @@ class Runtime private constructor(
         publishedNotebooks[ctx.session]=NotebookDocumentState(ctx.latestSnapshot,page?.value,layer?.value,
             java.util.Set.copyOf(ctx.currentSelectionSet.frozenSelectedIds.map { it.value }),ctx.notebookTool,
             java.util.List.copyOf(outline),java.util.Set.copyOf(ctx.state.pages.filter { it.metadata.bookmarked }.map { it.id.value }),ctx.notebookSettings)
+        val selectedBounds = ctx.currentSelectionSet.frozenSelectedIds.mapNotNull { ctx.state.getObject(it)?.bounds }
+            .reduceOrNull { a, b -> a.union(b) }
+        if (selectedBounds != null) ctx.activeEphemeralOverlays[20000] = EphemeralOverlayItem.SelectionBounds(selectedBounds)
+        else ctx.activeEphemeralOverlays.remove(20000)
         publishedScenes[ctx.session]=inkspace.core.render.Scene(snapshot=ctx.latestSnapshot,
             activeSpaceId=page?.let { ctx.state.getPage(it)?.spaceId } ?: SpaceId("space-1"),camera=ctx.viewport.camera,
+            backgroundColorArgb=0xFFE5E7EB.toInt(),
             viewportWidthPx=ctx.viewport.widthPx.coerceAtLeast(1),viewportHeightPx=ctx.viewport.heightPx.coerceAtLeast(1),
             surfaceEpoch=ctx.viewport.surfaceEpoch.takeIf { it.value>0 } ?: inkspace.core.id.SurfaceEpoch(1),
             draftStrokes=ctx.activeDraftStrokes.values.toList(),ephemeralOverlays=ctx.activeEphemeralOverlays.values.toList())
@@ -516,13 +554,19 @@ class Runtime private constructor(
         val prefix="copy-"+java.util.UUID.randomUUID().toString()
         when(action) {
             is NotebookAction.Tool -> changeNotebookView(session) { ctx ->
-                require(action.id in setOf("pen","fountain","pencil","brush","highlighter","eraser","lasso","shape","ruler","text","image","sticky","tape")) { "Unknown tool" }
+                require(action.id in setOf("pen","fountain","pencil","brush","highlighter","eraser","lasso","shape","ruler","text","image","sticky","tape","laser")) { "Unknown tool" }
+                if (ctx.notebookTool != action.id) cancelDrafts(ctx)
                 ctx.notebookTool=action.id;ctx.notebookSettings=action.settings
-                ctx.activeBrush=ctx.activeBrush.copy(kind=when(action.id) { "highlighter"->inkspace.core.ink.BrushKind.HIGHLIGHTER;"fountain"->inkspace.core.ink.BrushKind.FOUNTAIN;"pencil"->inkspace.core.ink.BrushKind.PENCIL;"brush"->inkspace.core.ink.BrushKind.BRUSH;else->inkspace.core.ink.BrushKind.BALL },
-                    colorArgb=action.settings.penColor,baseWidthPt=action.settings.penWidthPt)
+                ctx.activeBrush = action.settings.configFor(action.id).brush(action.id)
+                ctx.inputPolicy = action.settings.inputPolicy
+                ctx.gestureSettings = action.settings.gestures
                 if(action.id=="ruler") ctx.rulerOverlay=RulerOverlayState(isVisible=true)
             }
-            is NotebookAction.Settings -> changeNotebookView(session) { it.notebookSettings=action.settings;it.activeBrush=it.activeBrush.copy(colorArgb=action.settings.penColor,baseWidthPt=action.settings.penWidthPt) }
+            is NotebookAction.Settings -> changeNotebookView(session) {
+                it.notebookSettings=action.settings
+                it.activeBrush=action.settings.configFor(it.notebookTool).brush(it.notebookTool)
+                it.inputPolicy=action.settings.inputPolicy; it.gestureSettings=action.settings.gestures
+            }
             is NotebookAction.SelectPage -> changeNotebookView(session) { ctx ->
                 val selected=requireNotNull(ctx.state.getPage(PageId(action.pageId))) { "Page missing" }
                 ctx.viewport=ctx.viewport.copy(activePageId=selected.id);publishedViewports[session]=ctx.viewport;ctx.activeNotebookLayer=null
@@ -611,6 +655,36 @@ class Runtime private constructor(
         return PageMetadata(backgroundColor=defaults.paperColor,cover=defaults.cover,template=TemplateDescriptor(defaults.paper,1,defaults.paper,GridSpec(grid)))
     }
 
+    fun sessionForDocument(id: String): SessionKey? = publishedSnapshots.keys.firstOrNull { it.document.value == id }
+
+    fun acquireRecovery(session: SessionKey): RecoveryLease {
+        val result=java.util.concurrent.CompletableFuture<RecoveryLease>()
+        engineExecutor.execute {
+            val ctx=activeSessions[session]
+            if(ctx==null) { result.completeExceptionally(IllegalStateException("Export session is closed"));return@execute }
+            val snapshot=ctx.state.snapshot()
+            val pin=governor.tryReserve(inkspace.core.runtime.MemoryCategory.RESIDENT_MODEL_PAYLOAD,snapshot.estimatedPinnedBytes().coerceAtLeast(256),"recovery:${session.document.value}:${snapshot.version.revision.value}").getOrNull()
+            if(pin==null) { result.completeExceptionally(IllegalStateException("Recovery snapshot exceeds memory budget"));return@execute }
+            ctx.pendingExportAcquisitions++
+            try { storeExecutor.execute {
+                val lease=runCatching { RecoveryLease(snapshot,ctx.ownedStore ?: ports.storagePort as? DocumentStore,File(config.storageRootPath),pin) }
+                try {
+                    lease.fold({ if(!result.complete(it)) it.close() },{pin.close();result.completeExceptionally(it)})
+                } finally { engineExecutor.execute {ctx.pendingExportAcquisitions--} }
+
+            } } catch(error: Exception) { ctx.pendingExportAcquisitions--;pin.close();result.completeExceptionally(error) }
+        }
+        return try { result.get(30,TimeUnit.SECONDS) }
+        catch(error: java.util.concurrent.TimeoutException) {
+            if(!result.cancel(false)) result.thenAccept {it.close()}
+            throw error
+        } catch(error: InterruptedException) {
+            if(!result.cancel(false)) result.thenAccept {it.close()}
+            Thread.currentThread().interrupt()
+            throw error
+        }
+    }
+
     fun snapshotForThumbnail(documentId:String):DocumentSnapshot? {
         require(documentId.matches(Regex("[A-Za-z0-9_-]{1,128}")))
         publishedSnapshots.entries.firstOrNull { it.key.document.value==documentId }?.let { return it.value }
@@ -623,7 +697,8 @@ class Runtime private constructor(
 
     fun copyNotebook(sourceId:String,targetId:String,defaults:NotebookDefaults):Outcome<Unit,FeatureError> = try {
         require(sourceId.matches(Regex("[A-Za-z0-9_-]{1,128}")) && targetId.matches(Regex("[A-Za-z0-9_-]{1,128}")) && sourceId!=targetId)
-        val source=requireNotNull(snapshotForThumbnail(sourceId)) { "Source notebook unavailable" }
+        val original=requireNotNull(snapshotForThumbnail(sourceId)) { "Source notebook unavailable" }
+        val source=inkspace.exchange.NativeSelection.project(original,inkspace.exchange.NativeScope.PageRange(defaults.templatePage-1,defaults.templatePage-1)).snapshot
         val targetDir=File(config.storageRootPath,"documents/$targetId")
         require(!File(targetDir,"document.sqlite").exists() && !targetDir.exists()) { "Target already exists" }
         for(asset in source.referencedAssets()) {
@@ -926,6 +1001,7 @@ class Runtime private constructor(
         // 4. Round-robin up to 4 ink batches and up to 2 commands per session
         val sessionsSnapshot = synchronized(this) { roundRobinOrder.toList() }
         for (sessionKey in sessionsSnapshot) {
+            if (activeSessions[sessionKey]?.pendingExportAcquisitions?.let { it > 0 } == true) continue
             for (inkStep in 0 until 4) {
                 val inkBatch = synchronized(this) {
                     val ctx = activeSessions[sessionKey]
@@ -943,12 +1019,40 @@ class Runtime private constructor(
         }
     }
 
+    private fun cancelDrafts(ctx: SessionContext) {
+        val batch = InputBatch.fromSamples(ctx.session, 0, 0, InputActionKind.CANCEL,
+            listOf(inkspace.core.ink.RealSample(0f, 0f, .5f, 0f, 0))).getOrNull()!!
+        val page = ctx.state.pages.first()
+        val layer = ctx.state.layers.first()
+        ctx.inkEngine.ingest(batch, InputContext(ctx.state.version, page.spaceId, page.id, layer.id))
+        ctx.activeDraftStrokes.clear(); ctx.activeEphemeralOverlays.clear(); ctx.toolPaths.clear()
+    }
     private fun processNotebookToolInput(ctx:SessionContext,batch:InputBatch):Boolean {
-        if(ctx.notebookTool in setOf("pen","fountain","pencil","brush","highlighter","ruler")) return false
-        if(batch.isEffectiveCancel) {ctx.toolPaths.remove(batch.pointerId);ctx.activeEphemeralOverlays.remove(batch.pointerId);return true}
-        if(batch.action==InputActionKind.DOWN) {
+        if (ctx.notebookTool == "laser") {
+            if (batch.isEffectiveCancel) ctx.laser.clear()
+            else for (i in 0 until batch.realSampleCount) {
+                val point = ctx.viewport.camera.viewToDoc(inkspace.core.unit.ViewPoint(batch.realX(i).toDouble(), batch.realY(i).toDouble()))
+                ctx.laser.add(point.x, point.y, ctx.notebookSettings.configFor("laser").laserTrail)
+            }
+            return true
+        }
+        if (ctx.viewport.isReadOnly && batch.action == InputActionKind.UP) {
+            val p = ctx.viewport.camera.viewToDoc(inkspace.core.unit.ViewPoint(batch.realX(0).toDouble(), batch.realY(0).toDouble()))
+            ctx.state.queryBounds(DocRect(p.x-1,p.y-1,p.x+1,p.y+1)).lastOrNull { ctx.state.getObjectPayload(it) is TapePayload }
+                ?.let { androidFeatures?.toggleTapeReveal(ctx.session, it) }
+        }
+        val temporaryEraser = batch.toolType == inkspace.core.ink.InputToolType.ERASER || (batch.secondaryEraserButtonPressed && ctx.inputPolicy.temporaryEraserButtonEnabled)
+        val tool = ctx.toolPaths[batch.pointerId]?.tool ?: if (temporaryEraser) "eraser" else ctx.notebookTool
+        if (ctx.viewport.isReadOnly && tool !in setOf("lasso", "text")) return true
+        if(tool in setOf("pen","fountain","pencil","brush","highlighter")) return false
+        if(batch.isEffectiveCancel) {
+            if (batch.action == InputActionKind.CANCEL && !batch.isFlagCanceled) { ctx.toolPaths.clear(); ctx.activeEphemeralOverlays.clear() }
+            else { ctx.toolPaths.remove(batch.pointerId); ctx.activeEphemeralOverlays.remove(batch.pointerId) }
+            return true
+        }
+        if(batch.action==InputActionKind.DOWN || (temporaryEraser && batch.action == InputActionKind.MOVE && ctx.toolPaths[batch.pointerId] == null)) {
             if(ctx.toolPaths.size>=16) {reportFeatureError(ctx.session,FeatureError.InvalidParameters("Too many active pointers"));return true}
-            ctx.toolPaths[batch.pointerId]=NotebookToolPath()
+            ctx.toolPaths[batch.pointerId]=NotebookToolPath(tool)
         }
         val path=ctx.toolPaths[batch.pointerId] ?: return true
         for(i in 0 until batch.realSampleCount) {
@@ -966,7 +1070,7 @@ class Runtime private constructor(
         val layer=ctx.activeNotebookLayer?.let(ctx.state::getLayer) ?: ctx.state.layers.firstOrNull { it.pageId==page.id && it.isVisible && !it.isLocked } ?: return true
         val gesture=GestureId("tool-${batch.sequenceNumber}")
         val planCtx=PlanContext(activeSpaceId=page.spaceId,activePageId=page.id,activeLayerId=layer.id,gestureId=gesture,geometryPort=defaultGeometryPort,limits=config.limits)
-        if(ctx.notebookTool=="lasso") {
+        if(tool=="lasso") {
             val query=SelectionQuery(spaceId=page.spaceId,mode=if(points.size>=3)inkspace.core.objects.SelectionMode.FREEHAND else inkspace.core.objects.SelectionMode.RECTANGLE,
                 rect=bounds,polygonPoints=if(points.size>=3)points else emptyList())
             val selected=SelectionEngine.select(ctx.state,ctx.currentSelectionSet,query)
@@ -976,16 +1080,17 @@ class Runtime private constructor(
         }
         if(ctx.viewport.isReadOnly)return true
         val id=ObjectId("tool-"+java.util.UUID.randomUUID())
-        val plan=when(ctx.notebookTool) {
-            "eraser" -> ObjectPlanner.plan(ctx.state,ObjectAction.Erase(points,inkspace.core.objects.EraserSpec(radiusPt=ctx.notebookSettings.penWidthPt.coerceIn(0.1,500.0))),planCtx)
-            "shape" -> ObjectPlanner.plan(ctx.state,ObjectAction.ShapeAction.CreateShape(id,ShapePayload(inkspace.core.payload.ShapeType.Rectangle,ctx.notebookSettings.penColor,strokeWidthPt=ctx.notebookSettings.penWidthPt),bounds),planCtx)
+        val plan=when(tool) {
+            "eraser" -> ObjectPlanner.plan(ctx.state,ObjectAction.Erase(points,ctx.notebookSettings.configFor("eraser").eraser),planCtx)
+            "ruler" -> ObjectPlanner.plan(ctx.state,ObjectAction.ShapeAction.CreateShape(id,ShapePayload(inkspace.core.payload.ShapeType.Line,ctx.notebookSettings.configFor("ruler").color,strokeWidthPt=ctx.notebookSettings.configFor("ruler").widthPt,vertices=listOf(points.first(),points.last())),bounds),planCtx)
+            "shape" -> ObjectPlanner.plan(ctx.state,ObjectAction.ShapeAction.CreateShape(id,ShapePayload(ctx.notebookSettings.configFor("shape").shapeType,ctx.notebookSettings.configFor("shape").color,strokeWidthPt=ctx.notebookSettings.configFor("shape").widthPt),bounds),planCtx)
             "sticky" -> inkspace.content.ContentPlanner.plan(ctx.state,inkspace.content.ContentAction.InsertSticky(id,0xFFFFF59D.toInt(),"",bounds),planCtx)
-            "tape" -> Outcome.Success(EditPlan(ctx.state.version,mutations=listOf(InsertObject(page.spaceId,layer.id,id,TapePayload(ctx.notebookSettings.penColor,points=points,widthPt=ctx.notebookSettings.penWidthPt.coerceAtLeast(12.0)),bounds)),gesture=gesture,label=inkspace.core.id.UndoLabel("Tape")))
+            "tape" -> Outcome.Success(EditPlan(ctx.state.version,mutations=listOf(InsertObject(page.spaceId,layer.id,id,TapePayload(ctx.notebookSettings.configFor("tape").color,opacity=ctx.notebookSettings.configFor("tape").opacity,points=points,widthPt=ctx.notebookSettings.configFor("tape").widthPt),bounds)),gesture=gesture,label=inkspace.core.id.UndoLabel("Tape")))
             "text" -> { val hit=ctx.state.queryBounds(bounds).firstOrNull { ctx.state.getObjectPayload(it) is TextPayload };ctx.currentSelectionSet=SelectionSet(hit?.let(::setOf) ?: emptySet());null }
             else -> null
         }
         when(plan) {
-            is Outcome.Success -> {executeEditInternal(AppCommand.SubmitEdit(ctx.session,plan.value),null);if(ctx.notebookTool in setOf("shape","sticky","tape")) ctx.notebookTool="lasso"}
+            is Outcome.Success -> {executeEditInternal(AppCommand.SubmitEdit(ctx.session,plan.value),null);if(ctx.notebookTool in setOf("shape","sticky","tape") && ctx.notebookSettings.configFor(ctx.notebookTool).autoDeselect) ctx.notebookTool="lasso"}
             is Outcome.Failure -> reportFeatureError(ctx.session,plan.error)
             null -> Unit
         }
@@ -1498,6 +1603,7 @@ class Runtime private constructor(
         )
 
         val customPort = ports.storagePort
+        (ctx.ownedStore ?: customPort as? DocumentStore)?.retainPendingAssets(stagedAssets.map {it.assetId} + writeSet.referencedAssets)
         if (customPort != null) {
             customPort.trySubmit(commitReq)
         } else {
@@ -1573,6 +1679,7 @@ class Runtime private constructor(
 
     private fun updateViewportInternal(newState: ViewportState) {
         val ctx = activeSessions[newState.session] ?: return
+        if (ctx.viewport.camera != newState.camera || ctx.viewport.activePageId != newState.activePageId || (!ctx.viewport.isReadOnly && newState.isReadOnly)) cancelDrafts(ctx)
         ctx.viewport = newState
         publishedViewports[newState.session] = newState
         publishNotebook(ctx)
@@ -1581,7 +1688,20 @@ class Runtime private constructor(
 
     private fun attachSurfaceInternal(cmd: AppCommand.AttachSurface) {
         val ctx = activeSessions[cmd.session] ?: return
+        val page = ctx.state.pages.firstOrNull { it.id == ctx.viewport.activePageId } ?: ctx.state.pages.firstOrNull()
+        val firstAttach = ctx.viewport.surfaceEpoch.value == 0L
+        val initialCamera = if (firstAttach && ctx.viewport.camera == inkspace.core.unit.CameraTransform() && page != null) {
+            val scale = minOf((cmd.widthPx - 32).coerceAtLeast(1) / page.widthPt, (cmd.heightPx - 32).coerceAtLeast(1) / page.heightPt)
+                .coerceIn(inkspace.core.unit.MIN_CAMERA_SCALE, inkspace.core.unit.MAX_CAMERA_SCALE)
+            inkspace.core.unit.CameraTransform(scale, (cmd.widthPx - page.widthPt * scale) / 2, (cmd.heightPx - page.heightPt * scale) / 2)
+        } else if (ctx.viewport.widthPx > 0 && ctx.viewport.heightPx > 0) {
+            val camera = ctx.viewport.camera
+            camera.copy(translateX = camera.translateX + (cmd.widthPx - ctx.viewport.widthPx) / 2.0,
+                translateY = camera.translateY + (cmd.heightPx - ctx.viewport.heightPx) / 2.0)
+        } else ctx.viewport.camera
+        if (ctx.viewport.widthPx != cmd.widthPx || ctx.viewport.heightPx != cmd.heightPx || ctx.viewport.surfaceEpoch != cmd.surfaceEpoch) cancelDrafts(ctx)
         val updatedViewport = ctx.viewport.copy(
+            camera = initialCamera,
             widthPx = cmd.widthPx.coerceAtLeast(1),
             heightPx = cmd.heightPx.coerceAtLeast(1),
             isLandscape = cmd.widthPx > cmd.heightPx,

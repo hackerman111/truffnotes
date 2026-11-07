@@ -349,6 +349,12 @@ class ChunkedObjectDirectory internal constructor(
         return leaf.entries[id]
     }
 
+    fun objectVersion(id: ObjectId): Long? = getEntry(id)?.version
+
+    fun estimatedColdPayloadBytes(): Long = branches.filterNotNull().sumOf { branch ->
+        branch.leaves.filterNotNull().sumOf { leaf -> leaf.entryArray.sumOf { entry -> (entry as? DirectoryEntry.NonResident)?.estimatedColdBytes?.toLong() ?: 0L } }
+    }
+
     fun objectState(id: ObjectId): ResidencyState {
         return getEntry(id)?.residency ?: ResidencyState.Missing
     }

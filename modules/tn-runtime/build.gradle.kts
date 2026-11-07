@@ -38,6 +38,7 @@ dependencies {
     implementation(project(":tn-store"))
     implementation(project(":tn-render"))
     implementation(project(":tn-ink"))
+    implementation(project(":tn-media"))
     implementation(project(":tn-objects"))
     implementation(project(":tn-pages"))
     implementation(project(":tn-text"))
@@ -45,6 +46,7 @@ dependencies {
     implementation(project(":tn-library"))
     implementation(project(":tn-workspace"))
     implementation(project(":tn-pdf"))
+    implementation(project(":tn-exchange"))
 
     implementation(libs.kotlin.stdlib)
     implementation(libs.kotlinx.coroutines.core)

@@ -160,7 +160,9 @@ sealed interface RenderRequest {
     data class PdfOverlay(
         override val scene: Scene,
         val pageId: PageId,
-        val pageBoundsDoc: DocRect
+        val pageBoundsDoc: DocRect,
+        val objectIds: Set<ObjectId>? = null,
+        val includePaper: Boolean = true
     ) : RenderRequest
 }
 
@@ -244,7 +246,7 @@ sealed interface RenderReply {
         rasterPreviewArgb: IntArray
     ) : RenderReply {
         private val encodedPdf: ByteArray = pdfBytes.copyOf()
-        private val previewPixels: IntArray = rasterPreviewArgb.copyOf(widthPt * heightPt)
+        private val previewPixels: IntArray = if(rasterPreviewArgb.isEmpty()) IntArray(0) else rasterPreviewArgb.copyOf(widthPt * heightPt)
 
         fun pdfByteSize(): Int = encodedPdf.size
 
@@ -254,7 +256,7 @@ sealed interface RenderReply {
 
         fun previewPixelAt(x: Int, y: Int): Int {
             if (x !in 0 until widthPt || y !in 0 until heightPt) return 0
-            return previewPixels[y * widthPt + x]
+            return previewPixels.getOrElse(y * widthPt + x) { 0 }
         }
     }
 }

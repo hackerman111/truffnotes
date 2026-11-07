@@ -13,6 +13,21 @@ import kotlin.test.*
 class F12WorkspaceGatewayTest {
     @TempDir lateinit var directory: Path
 
+    @Test fun fullNativePreviewSupportsColdPayloadsWithoutMaterializingThem() {
+        val key=inkspace.core.model.SessionKey(inkspace.core.id.DocumentId("cold-preview"),inkspace.core.id.SessionEpoch(1))
+        val model=inkspace.core.model.DocumentState.createInitial(key.document)
+        model.registerNonResidentObject(inkspace.core.id.ObjectId("cold"),model.pages.first().spaceId,model.layers.first().id,inkspace.core.unit.DocRect(0.0,0.0,10.0,10.0))
+        val app=object:AppGateway {
+            override fun trySend(command:AppCommand):Outcome<RequestId,SubmitError> = Outcome.Success(RequestId(1))
+            override fun pollEvents(max:Int)=EventBatch(emptyList(),emptyList())
+            override fun closeAsync():Outcome<RequestId,SubmitError> = Outcome.Success(RequestId(2))
+        }
+        val gateway=WorkspaceGateway(directory.resolve("preview.json").toFile(),app,featureState={NotebookDocumentState(snapshot=model.snapshot())}) {key}
+        val preview=gateway.previewExport(ExportOptions())
+        assertTrue(preview.isSuccess,preview.toString())
+        assertTrue(preview.getOrNull()!!.contains("1 editable objects"))
+        assertEquals(inkspace.core.read.ResidencyState.NotResident,model.objectState(inkspace.core.id.ObjectId("cold")))
+    }
     @Test fun catalogAndColdTabsReloadWithoutResidentDocuments() {
         val app = object : AppGateway {
             override fun trySend(command: AppCommand): Outcome<RequestId, SubmitError> = Outcome.Success(RequestId(1))

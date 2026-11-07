@@ -1,5 +1,6 @@
 package inkspace.render
 
+import inkspace.core.id.ObjectId
 import inkspace.core.id.LayerId
 import inkspace.core.id.PageId
 import inkspace.core.model.AffineTransform2D
@@ -164,7 +165,8 @@ object ScenePreparer {
     fun prepare(
         scene: Scene,
         overrideViewportDocRect: DocRect? = null,
-        overrideCamera: CameraTransform = scene.camera
+        overrideCamera: CameraTransform = scene.camera,
+        objectIds: Set<ObjectId>? = null
     ): PreparedScene {
         val scaleBucket = ScaleBucket.compute(overrideCamera.scale)
         val visibleRect = overrideViewportDocRect ?: CameraRelativeProjector.visibleWorldRect(
@@ -198,10 +200,10 @@ object ScenePreparer {
         val objectsByLayer = HashMap<LayerId, MutableList<SceneObject>>(visibleLayers.size)
         var visibleCount = 0
 
-        val hiddenAttachments = scene.snapshot.directory.allResidentObjects().flatMap { obj ->
+        val hiddenAttachments = if(objectIds != null) emptySet() else scene.snapshot.directory.allResidentObjects().flatMap { obj ->
             (obj.payload as? inkspace.core.payload.StickyPayload)?.takeIf { it.isCollapsed }?.attachedIds.orEmpty()
         }.toSet()
-        val candidateIds = scene.snapshot.queryBounds(visibleRect)
+        val candidateIds = objectIds ?: scene.snapshot.queryBounds(visibleRect)
         for (id in candidateIds) {
             val obj = scene.snapshot.getObject(id) ?: continue
             if (id in hiddenAttachments) continue

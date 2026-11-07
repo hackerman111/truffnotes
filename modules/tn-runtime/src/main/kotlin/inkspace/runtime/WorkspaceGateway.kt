@@ -107,7 +107,11 @@ class WorkspaceGateway(
             }
             if (event is AppEvent.SnapshotPublished) {
                 thumbnails.invalidate(event.session.document.value)
-                if (views.state.active?.documentId == event.session.document.value) views.dispatch(ViewAction.Dirty(event.saveStatus.hasUnsavedChanges))
+                if (views.state.active?.documentId == event.session.document.value) {
+                    views.dispatch(ViewAction.Dirty(event.saveStatus.hasUnsavedChanges))
+                    val tool = featureState(event.session).tool
+                    if (tool != views.state.active?.tool) views.dispatch(ViewAction.Command(tool))
+                }
             }
             if (event is AppEvent.SaveStatusChanged && views.state.active?.documentId == event.saveStatus.session.document.value) {
                 views.dispatch(ViewAction.Dirty(event.saveStatus.hasUnsavedChanges))
@@ -152,6 +156,50 @@ class WorkspaceGateway(
         val current = currentSession() ?: return Outcome.Failure(FeatureError.InvalidParameters("No active notebook"))
         return pdfQuery(current, query)
     }
+    override fun previewExport(options: ExportOptions): Outcome<String,FeatureError> {
+        val pins=mutableListOf<AutoCloseable>()
+        var lease: RecoveryLease?=null
+        try {
+            val current=requireNotNull(currentSession()) {"Notebook closed"}
+            val view=featureState(current)
+            var snapshot=requireNotNull(view.snapshot) {"Notebook closed"}
+            if(options.mode=="Native" && options.scope=="full" && options.layerIds==null && !options.visibleOnly)
+                return Outcome.Success("Revision ${snapshot.version.revision.value}; ${snapshot.pages.size} pages; ${snapshot.totalObjectCount} editable objects; ${snapshot.layers.size} layers. All content and assets are streamed, including pending edits. IDs and covered Tape data are retained. No clipping or redaction.")
+            val active=snapshot.pages.firstOrNull {it.id.value==view.activePageId} ?: snapshot.pages.first()
+            val ids=options.objectIds.ifEmpty {view.selectedIds}.map {inkspace.core.id.ObjectId(it)}.toSet()
+            val scope=when(options.scope) {
+                "page" -> inkspace.exchange.NativeScope.Pages(listOf(active.id))
+                "range" -> inkspace.exchange.NativeScope.PageRange(options.firstPage-1,options.lastPage-1)
+                "template" -> inkspace.exchange.NativeScope.PageRange(options.firstPage-1,options.firstPage-1)
+                "region" -> inkspace.exchange.NativeScope.Region(active.id,requireNotNull(options.region))
+                "selection","objects" -> inkspace.exchange.NativeScope.Objects(ids)
+                else -> inkspace.exchange.NativeScope.Full
+            }
+            if(snapshot.directory.allResidentObjects().size!=snapshot.totalObjectCount) {
+                val runtime=requireNotNull(app as? Runtime) {"Cold export reader unavailable"}
+                lease=runtime.acquireRecovery(current)
+                val pages=when(scope) {
+                    is inkspace.exchange.NativeScope.Pages -> scope.ids.toSet()
+                    is inkspace.exchange.NativeScope.PageRange -> snapshot.pages.subList(scope.first,scope.last+1).map {it.id}.toSet()
+                    is inkspace.exchange.NativeScope.Region -> setOf(scope.page)
+                    is inkspace.exchange.NativeScope.Objects -> snapshot.pages.filter {page -> snapshot.directory.queryLayers(snapshot.layers.filter {it.pageId==page.id}.map {it.id}.toSet()).any {it in ids}}.map {it.id}.toSet()
+                    else -> null
+                }
+                var reserved=0L
+                snapshot=lease.residentSnapshot(pages) {needed -> if(needed>reserved) {
+                    val delta=((needed-reserved+65535)/65536)*65536
+                    pins+=runtime.governor.tryReserve(inkspace.core.runtime.MemoryCategory.RESIDENT_MODEL_PAYLOAD,delta,"export-preview").getOrNull() ?: error("Preview exceeds memory budget; use full native export")
+                    reserved+=delta
+                } }
+            }
+            val projection=inkspace.exchange.NativeSelection.project(snapshot,scope,options.layerIds?.map {inkspace.core.id.LayerId(it)}?.toSet(),options.visibleOnly)
+            val report=projection.report
+            val warnings=if(options.mode=="StandardAnnotations") "Ink, Sticky, rectangle and ellipse become standard annotations. Other types use shared appearance. Source PDF annotations use their existing appearance. Font and texture fallbacks are reported after export." else "PDF preserves source vectors. PNG/JPEG use bounded raster strips."
+            return Outcome.Success("Revision ${snapshot.version.revision.value}; ${projection.snapshot.pages.size} pages; ${projection.snapshot.totalObjectCount} objects; ${projection.snapshot.layers.size} layers. Added dependencies: ${report.dependencyObjects.size}. Detached links to omitted pages: ${report.detachedLinks.size}. Sticky: ${if(options.stickyExpanded) "expanded" else "collapsed"}; Tape: ${if(options.tapeRevealed) "revealed" else "hidden"}. Native retains whole objects and covered data. $warnings")
+        } catch(error:Exception) { return Outcome.Failure(FeatureError.InvalidParameters(error.message ?: "Invalid export selection")) }
+        finally {pins.asReversed().forEach {it.close()};lease?.close()}
+    }
+
     override fun editorState(): NotebookDocumentState = currentSession()?.let(featureState) ?: NotebookDocumentState()
 
     override fun thumbnail(documentId: String, maxEdge: Int) = thumbnails.get(documentId, maxEdge)
@@ -291,9 +339,13 @@ class WorkspaceGateway(
             val viewport = app.latestViewport(current)
             if (viewport != null && app.trySend(AppCommand.UpdateViewport(viewport.copy(camera = action.camera))) is Outcome.Failure) return rollback()
         }
+        if (current != null && (action is ViewAction.SetToolConfig || action is ViewAction.SetGestureConfig || action is ViewAction.Settings)) {
+            val configured = featureDispatch(current, NotebookAction.Settings(next?.settings ?: EditorSettings()))
+            if (configured is Outcome.Failure) return rollback()
+        }
         val commandId = update.commandId
         if (current != null && commandId != null) {
-            if (commandId in setOf("pen", "fountain", "pencil", "brush", "highlighter", "eraser", "lasso", "shape", "ruler", "text", "image", "sticky", "tape")) {
+            if (commandId in setOf("pen", "fountain", "pencil", "brush", "highlighter", "eraser", "lasso", "shape", "ruler", "text", "image", "sticky", "tape", "laser")) {
                 val applied = featureDispatch(current, NotebookAction.Tool(commandId, next?.settings ?: EditorSettings()))
                 if (applied is Outcome.Failure) return rollback()
             }

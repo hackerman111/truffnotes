@@ -66,7 +66,9 @@ data class ShapePayload(
     val startAngleRad: Double = 0.0,
     val sweepAngleRad: Double = 0.0,
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
-    val label: TextPayload? = null
+    val label: TextPayload? = null,
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val containerBounds: DocRect? = null
 ) : ObjectPayload {
     val frozenVertices: List<DocPoint> = java.util.List.copyOf(vertices)
     val frozenControlPoints: List<DocPoint> = java.util.List.copyOf(controlPoints)

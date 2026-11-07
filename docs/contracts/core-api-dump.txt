@@ -23,6 +23,12 @@ fun encodeToCbor(writeSet: WriteSet): ByteArray = CoreCodec.encodeToCbor(writeSe
 fun decodeFromCbor(bytes: ByteArray): Outcome<WriteSet, SerializationError> =
 fun encodeToJson(writeSet: WriteSet): String = CoreCodec.encodeToJson(writeSet)
 fun decodeFromJson(jsonString: String): Outcome<WriteSet, SerializationError> =
+interface AssetStagingPort {
+fun stage(source: java.io.InputStream, maxBytes: Long, suffix: String): StagedAssetRef
+fun open(asset: AssetId): java.io.InputStream
+data class ContentImportResult(val asset: StagedAssetRef, val width: Int, val height: Int, val exifOrientation: Int)
+data class ContentFailure(val reason: String, val recoverable: Boolean = true)
+data class ContentViewState(val revealedTapeIds: Set<ObjectId> = emptySet(), val collapsedStickyIds: Set<ObjectId> = emptySet())
 sealed interface CoreError
 sealed interface EditError : CoreError {
 data class PreconditionFailed(val message: String) : EditError
@@ -271,11 +277,13 @@ data class ExecuteScribbleErase(val proposal: GestureProposal.ScribbleErase) : G
 data class ExecuteUndoRedo(val proposal: GestureProposal.MultiFingerUndoRedo) : GestureDecision
 data class ExecuteNavigation(val proposal: GestureProposal.Navigation) : GestureDecision
 data class ConsumeAsSystem(val proposal: GestureProposal.SystemIntercept) : GestureDecision
+enum class PalmPosture { ANY, LEFT_OF_PEN, RIGHT_OF_PEN, BELOW_PEN }
 data class StylusInputPolicy(
 val stylusOnlyDrawing: Boolean = false,
 val palmRejectionEnabled: Boolean = true,
 val temporaryEraserButtonEnabled: Boolean = true,
-val palmRejectionWindowMs: Long = 300L
+val palmRejectionWindowMs: Long = 300L,
+val palmPosture: PalmPosture = PalmPosture.ANY
 enum class EffectiveInkToolMode {
 data class StagedChunkRef(
 val strokeId: ObjectId,
@@ -385,14 +393,16 @@ data class PageDescriptor(
 val id: PageId,
 val spaceId: SpaceId,
 val widthPt: Double,
-val heightPt: Double
+val heightPt: Double,
+val metadata: inkspace.core.pages.PageMetadata = inkspace.core.pages.PageMetadata()
 data class LayerDescriptor(
 val id: LayerId,
 val pageId: PageId,
 val name: String,
 val opacity: Float = 1.0f,
 val isVisible: Boolean = true,
-val isLocked: Boolean = false
+val isLocked: Boolean = false,
+val groupId: String? = null
 data class SceneObject(
 val id: ObjectId,
 val space: SpaceId,
@@ -429,6 +439,8 @@ val totalResidentBytes: Long
 val h = mixHash(id)
 val b = branches[h and 63] ?: return null
 val leaf = b.leaves[(h ushr 6) and 63] ?: return null
+fun objectVersion(id: ObjectId): Long? = getEntry(id)?.version
+fun estimatedColdPayloadBytes(): Long = branches.filterNotNull().sumOf { branch ->
 fun objectState(id: ObjectId): ResidencyState {
 fun getObject(id: ObjectId): SceneObject? {
 fun getObjectVersion(id: ObjectId): Long? {
@@ -460,6 +472,8 @@ val newLeaves = oldBranch.leaves.copyOf()
 val newBranches = branches.copyOf()
 fun queryBounds(rect: DocRect): List<ObjectId> {
 val result = ArrayList<ObjectId>()
+fun queryLayers(layers: Set<LayerId>): List<ObjectId> {
+val ids = ArrayList<ObjectId>()
 fun allResidentObjects(): List<SceneObject> {
 val list = ArrayList<SceneObject>()
 fun totalLeafChunks(): Int {
@@ -516,6 +530,19 @@ fun acquirePin(snapshot: DocumentSnapshot, history: History): Outcome<SnapshotLe
 val bytes = snapshot.estimatedPinnedBytes().coerceAtLeast(256L)
 val projected = snapshotPinnedBytes + history.pinnedBytes + bytes
 val lease = SnapshotLease(snapshot, bytes) { released ->
+data class SnapshotMetadata(val version: DocVersion, val kind: DocumentKind,
+val pages: List<PageDescriptor>, val layers: List<LayerDescriptor>)
+fun restoreSnapshot(metadata: SnapshotMetadata, records: Sequence<SceneObject>): DocumentSnapshot {
+val pages = metadata.pages.associateBy { it.id }
+val layers = metadata.layers.associateBy { it.id }
+val parents = LinkedHashMap<ObjectId, ObjectId>()
+val layer = requireNotNull(layers[record.layer]) { "Missing object layer" }
+val group = record.payload as? GroupPayload
+val link = record.payload as? LinkAnchorPayload
+val objectValue = requireNotNull(directory.getObject(member)) { "Missing group member" }
+val group = requireNotNull(directory.getObject(parent))
+val seen = HashSet<ObjectId>()
+val snapshot = DocumentSnapshot(metadata.version, metadata.kind, directory, metadata.pages, metadata.layers, pages, layers, parents)
 sealed interface Mutation
 data class InsertObject(
 val space: SpaceId,
@@ -578,6 +605,9 @@ data class ResizePage(
 val pageId: PageId,
 val newWidthPt: Double,
 val newHeightPt: Double
+data class UpdatePageDescriptor(val page: PageDescriptor) : Mutation
+data class UpdateLayerDescriptor(val layer: LayerDescriptor) : Mutation
+data class RelocateObject(val id: ObjectId, val layer: LayerId, val space: SpaceId, val targetVersion: Long? = null) : Mutation
 data class Precondition(
 val id: String,
 val expectedVersion: Long
@@ -645,6 +675,12 @@ val idx = stagedLayers.indexOfFirst { it.id == mutation.layerId }
 val idx = if (mutation.index in 0..stagedPages.size) mutation.index else stagedPages.size
 val currentIds = stagedPages.map { it.id }
 val reordered = mutation.orderedPageIds.map { stagedPageMap[it]!! }
+val existing = stagedPageMap[mutation.page.id]
+val next = mutation.page.copy(metadata=mutation.page.metadata.frozen())
+val existing = stagedLayerMap[mutation.layer.id]
+val obj = currentObject(mutation.id) ?: return Outcome.Failure(EditError.EntityNotFound("Object missing"))
+val layer = stagedLayerMap[mutation.layer] ?: return Outcome.Failure(EditError.EntityNotFound("Target layer missing"))
+val page = stagedPageMap[layer.pageId] ?: return Outcome.Failure(EditError.EntityNotFound("Target page missing"))
 val existing = stagedPageMap[mutation.pageId]
 val updated = existing.copy(widthPt = mutation.newWidthPt, heightPt = mutation.newHeightPt)
 val idx = stagedPages.indexOfFirst { it.id == mutation.pageId }
@@ -723,6 +759,10 @@ val idx = workingPages.indexOfFirst { it.id == mutation.pageId }
 val prev = workingPageMap.remove(mutation.pageId)!!
 val prevOrder = workingPages.map { it.id }
 val reordered = mutation.orderedPageIds.map { workingPageMap[it]!! }
+val prev = workingPageMap.getValue(mutation.page.id)
+val next = mutation.page.copy(metadata=mutation.page.metadata.frozen())
+val prev = workingLayerMap.getValue(mutation.layer.id)
+val prev = requireNotNull(workingDir.getObject(mutation.id))
 val prev = workingPageMap[mutation.pageId]!!
 val next = prev.copy(widthPt = mutation.newWidthPt, heightPt = mutation.newHeightPt)
 val idx = workingPages.indexOfFirst { it.id == mutation.pageId }
@@ -1079,6 +1119,19 @@ fun getOrNull(): T? = when (this) {
 fun errorOrNull(): E? = when (this) {
 data class Success<out T>(val value: T) : Outcome<T, Nothing> {
 data class Failure<out E>(val error: E) : Outcome<Nothing, E> {
+fun frozen(): OutlineNode = copy(children = java.util.List.copyOf(children.map { it.frozen() }))
+val backgroundColor: Int = -1,
+val template: TemplateDescriptor? = null,
+val cover: String = "plain",
+val bookmarked: Boolean = false,
+val outline: List<OutlineNode> = emptyList(),
+val frames: List<FrameDescriptor> = emptyList(),
+val pdfBackground: PdfPageRef? = null,
+val rotation: Int = 0
+val ids = HashSet<String>()
+fun visit(nodes: List<OutlineNode>, depth: Int) {
+fun frozen(): PageMetadata = copy(outline=java.util.List.copyOf(outline.map { it.frozen() }), frames=java.util.List.copyOf(frames))
+fun ObjectPayload.referencedAssetIds(): Set<AssetId> = when(this) {
 sealed interface ObjectPayload
 data class StrokePayload(
 val brushId: String,
@@ -1105,7 +1158,9 @@ val controlPoints: List<DocPoint> = emptyList(),
 val startArrowhead: ArrowheadStyle = ArrowheadStyle.NONE,
 val endArrowhead: ArrowheadStyle = if (shapeType == ShapeType.Arrow) ArrowheadStyle.OPEN_ARROW else ArrowheadStyle.NONE,
 val startAngleRad: Double = 0.0,
-val sweepAngleRad: Double = 0.0
+val sweepAngleRad: Double = 0.0,
+val label: TextPayload? = null,
+val containerBounds: DocRect? = null
 val frozenVertices: List<DocPoint> = java.util.List.copyOf(vertices)
 val frozenControlPoints: List<DocPoint> = java.util.List.copyOf(controlPoints)
 enum class ShapeType {
@@ -1138,32 +1193,53 @@ val text: String,
 val fontSizePt: Double = 12.0,
 val fontColor: Int = 0xFF000000.toInt(),
 val isRtl: Boolean = false,
-val runs: List<TextRun> = emptyList()
+val runs: List<TextRun> = emptyList(),
+val paragraph: inkspace.core.text.ParagraphStyle = inkspace.core.text.ParagraphStyle(),
+val fontFamily: String = "sans-serif",
+val fontAsset: AssetId? = null,
+val pageBound: Boolean = false,
+val containerBounds: DocRect? = null
 data class TextRun(
 val start: Int,
 val end: Int,
 val bold: Boolean = false,
 val italic: Boolean = false,
 val underline: Boolean = false,
-val color: Int? = null
+val color: Int? = null,
+val strike: Boolean = false,
+val highlight: Int? = null,
+val fontFamily: String? = null,
+val fontSizePt: Double? = null,
+val fontAsset: AssetId? = null
 data class ImagePayload(
 val asset: AssetId,
 val naturalWidthPx: Int,
 val naturalHeightPx: Int,
-val cropRect: DocRect? = null
+val cropRect: DocRect? = null,
+val cropMask: List<DocPoint> = emptyList(),
+val exifOrientation: Int = 1,
+val posterFrame: Int = 0,
+val containerBounds: DocRect? = null
 data class GroupPayload(
 val members: List<ObjectId>
 data class StickyPayload(
 val color: Int,
 val content: String,
-val isCollapsed: Boolean = false
+val isCollapsed: Boolean = false,
+val richText: TextPayload? = null,
+val attachedIds: List<ObjectId> = emptyList()
 data class TapePayload(
 val patternColor: Int,
-val opacity: Float = 0.8f
+val opacity: Float = 0.8f,
+val points: List<DocPoint> = emptyList(),
+val widthPt: Double = 24.0,
+val pattern: String = "solid",
+val straight: Boolean = false
 data class LinkAnchorPayload(
 val title: String,
 val targetPage: PageId? = null,
 val targetUrl: String? = null
+data class PdfObjectPayload(val page: inkspace.core.pdf.PdfPageRef, val localBounds: DocRect? = null) : ObjectPayload {
 data class PdfHandle(val id: Long, val epoch: Long)
 data class PdfPageRef(val asset: AssetId, val pageIndex: Int, val cropBox: DocRect, val rotation: Int = 0)
 data class PdfTextSpan(val text: String, val bounds: DocRect, val startUtf16: Int)
@@ -1172,7 +1248,7 @@ data class PdfOutlineEntry(val title: String, val pageIndex: Int, val depth: Int
 sealed interface PdfReply {
 data class Opened(val handle: PdfHandle, val pageCount: Int) : PdfReply
 data class PageInfo(val page: PdfPageRef) : PdfReply
-data class Text(val spans: List<PdfTextSpan>, val truncated: Boolean = false) : PdfReply
+data class Text(val spans: List<PdfTextSpan>, val truncated: Boolean = false, val nextIndex: Int? = null) : PdfReply
 data class Links(val links: List<PdfLink>) : PdfReply
 data class Outline(val entries: List<PdfOutlineEntry>) : PdfReply
 data class Closed(val handle: PdfHandle) : PdfReply
@@ -1181,6 +1257,12 @@ class Tile(val handle: PdfHandle, val width: Int, val height: Int, rgba: ByteArr
 val size = width.toLong() * height * 4L
 fun copyRgba(): ByteArray = bytes.copyOf()
 val byteSize: Int get() = bytes.size
+interface FrozenStorageSnapshot : AutoCloseable {
+val metadata: SnapshotMetadata
+val objectCount: Int
+val assets: Set<AssetId>
+fun records(): Sequence<SceneObject>
+fun asset(id: AssetId): InputStream
 data class GeometryRequest(
 val strokeId: ObjectId,
 val origin: DocPoint,
@@ -1200,20 +1282,26 @@ data class TextLayoutRequest(
 val text: String,
 val fontSizePt: Double,
 val maxWidthPt: Double,
-val isRtl: Boolean = false
+val isRtl: Boolean = false,
+val payload: inkspace.core.payload.TextPayload? = null
 data class TextLayout(
 val widthPt: Double,
 val heightPt: Double,
 val lineCount: Int,
 val lines: List<String> = emptyList(),
-val estimatedBytes: Long = 128L + lines.sumOf { it.length.toLong() * 2L }
+val estimatedBytes: Long = 128L + lines.sumOf { it.length.toLong() * 2L },
+val paintPlan: inkspace.core.text.TextPaintArtifact? = null
 data class ResourceRequest(
 val asset: AssetId,
-val byteBudget: Long
+val byteBudget: Long,
+val targetWidthPx: Int = 512,
+val targetHeightPx: Int = 512,
+val posterFrame: Int = 0
 data class ResourceLease(
 val asset: AssetId,
 val sizeBytes: Long,
-val isAvailable: Boolean
+val isAvailable: Boolean,
+val imageTile: inkspace.core.render.TileArtifact? = null
 fun isClosed(): Boolean = closed
 data class StagedAssetRef(
 val assetId: AssetId,
@@ -1304,7 +1392,7 @@ sealed interface PdfRequest {
 data class Open(val asset: AssetId, val password: String? = null) : PdfRequest
 data class Info(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int) : PdfRequest
 data class Tile(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val width: Int, val height: Int, val region: DocRect) : PdfRequest
-data class Text(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val maxChars: Int = 65536) : PdfRequest
+data class Text(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val maxChars: Int = 65536, val startIndex: Int = 0) : PdfRequest
 data class Search(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int, val query: String, val maxMatches: Int = 256) : PdfRequest
 data class Links(val handle: inkspace.core.pdf.PdfHandle, val pageIndex: Int) : PdfRequest
 data class Outline(val handle: inkspace.core.pdf.PdfHandle, val maxEntries: Int = 4096) : PdfRequest
@@ -1340,6 +1428,8 @@ fun objectState(id: ObjectId): ResidencyState
 fun isLocked(id: ObjectId): Boolean
 fun getObjectPayload(id: ObjectId): ObjectPayload?
 fun queryBounds(rect: DocRect): List<ObjectId>
+fun objectIdsInLayers(layers: Set<LayerId>): List<ObjectId> = queryBounds(DocRect(-1e9,-1e9,1e9,1e9)).filter {
+val obj = getObject(it) ?: throw IllegalArgumentException("Object directory lacks layer header")
 fun getObject(id: ObjectId): SceneObject? = null
 fun getObjectVersion(id: ObjectId): Long? = getObject(id)?.version
 fun isLayerLocked(layerId: LayerId): Boolean = getLayer(layerId)?.isLocked ?: false
@@ -1402,6 +1492,7 @@ val clipToPageBounds: Boolean = true,
 val draftStrokes: List<DraftStrokeSceneItem> = emptyList(),
 val ephemeralOverlays: List<EphemeralOverlayItem> = emptyList(),
 val changeSet: ChangeSet? = null,
+val revealedTapeIds: Set<ObjectId> = emptySet(),
 val tiles: List<TileArtifact> = emptyList()
 val frozenDraftStrokes: List<DraftStrokeSceneItem> = java.util.List.copyOf(draftStrokes)
 val frozenEphemeralOverlays: List<EphemeralOverlayItem> = java.util.List.copyOf(ephemeralOverlays)
@@ -1416,7 +1507,9 @@ val regionDoc: DocRect,
 val scale: Double = 1.0
 data class PdfOverlay(
 val pageId: PageId,
-val pageBoundsDoc: DocRect
+val pageBoundsDoc: DocRect,
+val objectIds: Set<ObjectId>? = null,
+val includePaper: Boolean = true
 data class FrameStats(
 val revision: Revision,
 val surfaceEpoch: SurfaceEpoch,
@@ -1647,7 +1740,46 @@ fun closeAsync(): Outcome<RequestId, SubmitError>
 fun latestSnapshot(session: SessionKey): DocumentSnapshot? = null
 fun latestSaveStatus(session: SessionKey): SaveStatus? = null
 fun latestViewport(session: SessionKey): ViewportState? = null
+fun activeSessionFor(documentId: String): SessionKey? = null
 fun acknowledgeError(error: AppEvent.ErrorEvent) {}
+val alignment: TextAlignment = TextAlignment.START,
+val lineSpacingMultiplier: Float = 1f,
+val lineSpacingPt: Float = 0f,
+val indentPt: Int = 0,
+val list: TextListKind = TextListKind.NONE
+sealed interface ImeEdit {
+val objectId: ObjectId
+val focusEpoch: Long
+data class Replace(override val objectId: ObjectId, override val focusEpoch: Long,
+val start: Int, val end: Int, val text: String, val composing: Boolean = false,
+val newCursorPosition: Int = 1) : ImeEdit
+data class Selection(override val objectId: ObjectId, override val focusEpoch: Long,
+val start: Int, val end: Int) : ImeEdit
+data class Finish(override val objectId: ObjectId, override val focusEpoch: Long, val cancel: Boolean = false) : ImeEdit
+interface TextPaintArtifact {
+val estimatedBytes: Long
+fun draw(target: Any)
+fun offsetAt(x: Float, y: Int): Int
+fun cursorRect(offset: Int): DocRect
+fun rasterize(scale: Double, maxPixels: Int): TextRaster
+fun rasterizeRegion(scale: Double, maxPixels: Int, region: DocRect): TextRaster = rasterize(scale, maxPixels)
+class TextRaster(val width: Int, val height: Int, pixels: IntArray) {
+fun pixelAt(x: Int, y: Int): Int = pixels[y * width + x]
+class TextInputMap(val text: String) {
+val starts = IntArray(text.length + 1)
+val matcher = GRAPHEME.matcher(text)
+val codePoint = text.codePointAt(chars)
+fun isBoundary(offset: Int): Boolean = boundaries.binarySearch(offset) >= 0
+fun floor(offset: Int): Int {
+val found = boundaries.binarySearch(offset.coerceIn(0, text.length))
+fun ceil(offset: Int): Int {
+val found = boundaries.binarySearch(offset.coerceIn(0, text.length))
+fun utf8Offset(utf16: Int): Int {
+val found = boundaries.binarySearch(utf16)
+fun utf16Offset(utf8: Int): Int {
+val found = bytesAtBoundary.binarySearch(utf8)
+fun isWellFormed(value: String): Boolean {
+val char = value[index++]
 data class DocPoint(val x: Double, val y: Double) {
 data class DocRect(
 val left: Double,
@@ -1673,10 +1805,51 @@ val vy = (doc.y * scale) + translateY
 fun viewToDoc(view: ViewPoint): DocPoint {
 val dx = (view.x - translateX) / scale
 val dy = (view.y - translateY) / scale
+data class TimerSession(val elapsedNanos: Long, val laps: List<Long>)
+data class TimerSnapshot(val accumulatedNanos: Long = 0, val startedNanos: Long? = null, val laps: List<Long> = emptyList(), val history: List<TimerSession> = emptyList())
+interface AccessoryTimer {
+fun elapsed(): Long
+fun start()
+fun pause()
+fun reset()
+fun lap(): Long
+fun snapshot(): TimerSnapshot
+data class ExportOptions(
+val mode: String = "Native", val scope: String = "full",
+val firstPage: Int = 1, val lastPage: Int = 1,
+val region: DocRect? = null, val layerIds: Set<String>? = null,
+val objectIds: Set<String> = emptySet(), val visibleOnly: Boolean = false, val stickyExpanded: Boolean = true, val tapeRevealed: Boolean = false
+val NOTEBOOK_TOOLS = listOf("pen", "fountain", "pencil", "brush", "highlighter", "eraser", "lasso", "shape", "ruler", "text", "image", "sticky", "tape", "laser")
+data class Palette(val colors: List<Int> = listOf(0xff000000.toInt(), 0xffd32f2f.toInt(), 0xff1976d2.toInt())) {
+data class ToolConfig(
+val color: Int = 0xff000000.toInt(), val widthPt: Double = 2.0, val opacity: Float = 1f,
+val smoothing: Float = .5f, val pressure: Float = .6f, val tilt: Float = .3f,
+val endCap: StrokeEndCap = StrokeEndCap.ROUND, val pattern: StrokeLinePattern = StrokeLinePattern.SOLID,
+val eraser: EraserSpec = EraserSpec(), val autoDeselect: Boolean = true, val laserTrail: Boolean = true,
+val shapeType: inkspace.core.payload.ShapeType = inkspace.core.payload.ShapeType.Rectangle
+fun brush(tool: String) = BrushSpec(kind = when(tool) {
+data class ToolPreset(val name: String, val tool: String, val config: ToolConfig) {
+data class ToolbarLayout(
+val tools: List<String> = NOTEBOOK_TOOLS, val hidden: Set<String> = emptySet(),
+val compact: Boolean = false, val dockBottom: Boolean = false, val sizeDp: Int = 48,
+val undoAtEnd: Boolean = false, val focusSide: String = "left", val autoHide: Boolean = false
+fun visibleTools(): List<String> = (tools.filter { it !in hidden } + "lasso").distinct()
+data class ZoomViewState(
+val region: DocRect = DocRect(0.0, 0.0, 200.0, 60.0), val lineStartPt: Double = 0.0,
+val lineHeightPt: Double = 24.0, val overlapPt: Double = 20.0,
+val pinned: Boolean = false, val collapsed: Boolean = false, val autoAdvance: Boolean = false,
+val heightDp: Int = 220
+fun camera(width: Int, height: Int): CameraTransform {
+val scale = minOf(width / region.width, height / region.height).coerceIn(MIN_CAMERA_SCALE, MAX_CAMERA_SCALE)
+fun advance(pageWidth: Double, nextLine: Boolean = false): ZoomViewState {
+val x = region.right - overlapPt
+val moveLine = nextLine || x + region.width > pageWidth
+val left = if (moveLine) lineStartPt else x
+val top = if (moveLine) region.top + lineHeightPt else region.top
 data class NotebookDefaults(
 val cover: String = "plain", val paper: String = "blank",
 val widthPt: Double = 595.28, val heightPt: Double = 841.89,
-val horizontalScroll: Boolean = false
+val horizontalScroll: Boolean = false, val paperColor: Int = -1, val templatePage: Int = 1
 data class LibraryEntry(
 val id: String, val name: String, val parentId: String? = null,
 val isFolder: Boolean = false, val favorite: Boolean = false,
@@ -1684,6 +1857,7 @@ val trashed: Boolean = false, val lastOpened: Long = 0,
 val defaults: NotebookDefaults = NotebookDefaults(), val template: Boolean = false
 enum class LibrarySection { DOCUMENTS, FAVORITES, RECENT, TEMPLATES, TRASH }
 sealed interface LibraryAction {
+data class Import(val entries: List<LibraryEntry>) : LibraryAction
 data class Create(val id: String, val name: String, val parentId: String? = null,
 val isFolder: Boolean = false, val defaults: NotebookDefaults = NotebookDefaults()) : LibraryAction
 data class Rename(val id: String, val name: String) : LibraryAction
@@ -1692,13 +1866,17 @@ data class Favorite(val ids: Set<String>, val value: Boolean) : LibraryAction
 data class Trash(val ids: Set<String>) : LibraryAction
 data class Restore(val ids: Set<String>) : LibraryAction
 data class Opened(val id: String, val timestamp: Long) : LibraryAction
+data class Template(val ids: Set<String>, val enabled: Boolean) : LibraryAction
+data class Defaults(val id: String, val defaults: NotebookDefaults) : LibraryAction
 data class OperationId(val value: String)
 data class LibraryError(val message: String)
 data class TabState(
 val id: String, val documentId: String, val camera: CameraTransform = CameraTransform(),
 val tool: String = "pen", val readOnly: Boolean = false, val focus: Boolean = false,
-val dirty: Boolean = false, val selectedIds: Set<String> = emptySet()
-data class WorkspaceState(val tabs: List<TabState> = emptyList(), val activeTab: String? = null) {
+val dirty: Boolean = false, val selectedIds: Set<String> = emptySet(),
+val activePage: String? = null, val activeLayer: String? = null,
+val settings: EditorSettings = EditorSettings(), val zoom: ZoomViewState? = null
+data class WorkspaceState(val tabs: List<TabState> = emptyList(), val activeTab: String? = null, val closedTabs: List<TabState> = emptyList(), val globalSettings: EditorSettings = EditorSettings()) {
 val active: TabState? get() = tabs.find { it.id == activeTab }
 sealed interface ViewAction {
 data class Open(val documentId: String) : ViewAction
@@ -1708,6 +1886,17 @@ data class Reorder(val tabIds: List<String>) : ViewAction
 data class Dirty(val dirty: Boolean) : ViewAction
 data class Camera(val camera: CameraTransform) : ViewAction
 data class Command(val id: String) : ViewAction
+data class Selection(val ids: Set<String>) : ViewAction
+data class ActivePage(val id: String) : ViewAction
+data class ActiveLayer(val id: String) : ViewAction
+data class Settings(val settings: EditorSettings) : ViewAction
+data class GlobalSettings(val settings: EditorSettings) : ViewAction
+data class SetToolbarLayout(val layout: ToolbarLayout, val landscape: Boolean) : ViewAction
+data class OpenZoom(val state: ZoomViewState? = ZoomViewState()) : ViewAction
+data class MoveZoom(val region: inkspace.core.unit.DocRect) : ViewAction
+data class ZoomAdvance(val pageWidth: Double, val nextLine: Boolean = false) : ViewAction
+data class SetToolConfig(val tool: String, val config: ToolConfig) : ViewAction
+data class SetGestureConfig(val settings: inkspace.core.ink.GestureSettings) : ViewAction
 data class ViewUpdate(val state: WorkspaceState, val accepted: Boolean, val commandId: String? = null)
 data class CommandDescriptor(val id: String, val changesDocument: Boolean = false)
 interface NotebookGateway {
@@ -1716,3 +1905,57 @@ fun submit(action: LibraryAction): Outcome<OperationId, LibraryError>
 fun dispatch(action: ViewAction): ViewUpdate
 fun resolveKey(key: String, ctrl: Boolean, shift: Boolean, textFocused: Boolean): CommandDescriptor?
 fun workspace(): WorkspaceState
+fun perform(action: NotebookAction): Outcome<RequestId, FeatureError>
+fun editorState(): NotebookDocumentState
+fun thumbnail(documentId: String, maxEdge: Int = 128): Outcome<NotebookThumbnail, FeatureError>
+fun copyFromTemplate(sourceId: String, id: String, name: String, defaults: NotebookDefaults): Outcome<OperationId, LibraryError>
+fun queryPdf(query: PdfQuery): Outcome<PdfViewData, FeatureError>
+fun previewExport(options: ExportOptions): Outcome<String,FeatureError> = Outcome.Failure(FeatureError.InvalidParameters("Export preview unavailable"))
+fun takeError(): String? = null
+fun close() {}
+data class EditorSettings(
+val horizontalScroll: Boolean = false, val textPinned: Boolean = false,
+val panel: String? = null, val panelDocked: Boolean = true,
+val penColor: Int = -16777216, val penWidthPt: Double = 2.0,
+val penOpacity: Float = 1f, val smoothing: Int = 1,
+val listScale: Float = 1f,
+val tools: Map<String, ToolConfig> = emptyMap(), val palettes: Map<String, Palette> = emptyMap(),
+val presets: List<ToolPreset> = emptyList(),
+val portraitToolbar: ToolbarLayout = ToolbarLayout(), val landscapeToolbar: ToolbarLayout = ToolbarLayout(),
+val gestures: inkspace.core.ink.GestureSettings = inkspace.core.ink.GestureSettings(),
+val inputPolicy: inkspace.core.ink.StylusInputPolicy = inkspace.core.ink.StylusInputPolicy()
+fun configFor(tool: String): ToolConfig = tools[tool] ?: ToolConfig(color = penColor, widthPt = penWidthPt, opacity = penOpacity, smoothing = smoothing / 3f)
+sealed interface NotebookAction {
+data class Tool(val id: String, val settings: EditorSettings = EditorSettings()) : NotebookAction
+data class Page(val command: String, val pageId: String? = null, val index: Int = -1,
+val widthPt: Double? = null, val heightPt: Double? = null, val policy: String = "KEEP_GEOMETRY",
+val defaults: NotebookDefaults? = null) : NotebookAction
+data class Layer(val command: String, val layerId: String? = null, val targetLayerId: String? = null,
+val name: String? = null, val visible: Boolean? = null, val locked: Boolean? = null,
+val opacity: Float? = null, val index: Int = -1) : NotebookAction
+data class Outline(val command: String, val id: String? = null, val parentId: String? = null,
+val title: String = "", val pageId: String? = null, val index: Int = -1) : NotebookAction
+data class Bookmark(val pageId: String, val enabled: Boolean) : NotebookAction
+data class SelectPage(val pageId: String) : NotebookAction
+data class SelectLayer(val layerId: String) : NotebookAction
+data class Selection(val command: String, val dx: Double = 0.0, val dy: Double = 0.0,
+val color: Int? = null, val widthPt: Double? = null) : NotebookAction
+data class InsertText(val text: String) : NotebookAction
+data class ImportResource(val uri: String, val mimeType: String, val asDocument: Boolean = false, val targetDocumentId: String? = null) : NotebookAction
+data class Settings(val settings: EditorSettings) : NotebookAction
+data class NotebookOutline(val id: String, val title: String, val pageId: String, val parentId: String? = null, val depth: Int = 0)
+data class NotebookDocumentState(
+val snapshot: DocumentSnapshot? = null, val activePageId: String? = null,
+val activeLayerId: String? = null, val selectedIds: Set<String> = emptySet(),
+val tool: String = "pen", val outline: List<NotebookOutline> = emptyList(),
+val bookmarks: Set<String> = emptySet(), val settings: EditorSettings = EditorSettings()
+class NotebookThumbnail(val width: Int, val height: Int, pixels: IntArray) {
+fun copyPixels(): IntArray = pixels.copyOf()
+val byteSize: Int get() = pixels.size * 4
+data class PdfQuery(
+val command: String, val objectId: String? = null, val query: String = "",
+val pageIndex: Int? = null, val selection: inkspace.core.unit.DocRect? = null, val startIndex: Int = 0
+data class PdfViewData(
+val text: String = "", val spans: List<inkspace.core.pdf.PdfTextSpan> = emptyList(),
+val links: List<inkspace.core.pdf.PdfLink> = emptyList(),
+val outline: List<inkspace.core.pdf.PdfOutlineEntry> = emptyList(), val nextIndex: Int? = null

@@ -54,6 +54,7 @@ class LibraryService(private val file: File) {
         val entries = catalog.entries.associateByTo(linkedMapOf()) { it.id }
         fun invalid(message: String) = Outcome.Failure(LibraryError(message))
         val ids = when (action) {
+            is LibraryAction.Import -> emptySet()
             is LibraryAction.Create -> emptySet()
             is LibraryAction.Rename -> setOf(action.id)
             is LibraryAction.Move -> action.ids
@@ -66,6 +67,21 @@ class LibraryService(private val file: File) {
         }
         if (ids.any { it !in entries }) return invalid("Unknown library item")
         when (action) {
+            is LibraryAction.Import -> {
+                val incoming = action.entries
+                if (incoming.isEmpty() || entries.size + incoming.size > 10000 || incoming.map { it.id }.distinct().size != incoming.size) return invalid("Invalid import batch")
+                if (incoming.any { !validId.matches(it.id) || it.id in entries || it.name.isBlank() || it.name.length > 1024 }) return invalid("Invalid import entry")
+                val combined = entries + incoming.associateBy { it.id }
+                for (entry in incoming) {
+                    var parent = entry.parentId
+                    val visited = hashSetOf(entry.id)
+                    while (parent != null) {
+                        if (!visited.add(parent) || combined[parent]?.let { it.isFolder && !it.trashed } != true) return invalid("Invalid import hierarchy")
+                        parent = combined.getValue(parent).parentId
+                    }
+                    entries[entry.id] = entry
+                }
+            }
             is LibraryAction.Create -> {
                 if (entries.size >= 10000 || !validId.matches(action.id) || action.id in entries || action.name.isBlank() || action.name.length > 1024) return invalid("Invalid name or duplicate ID")
                 if (action.parentId != null && entries[action.parentId]?.let { it.isFolder && !effectivelyTrashed(it, entries) } != true) return invalid("Missing folder")

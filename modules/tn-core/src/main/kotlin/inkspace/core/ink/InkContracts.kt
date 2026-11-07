@@ -613,11 +613,15 @@ sealed interface GestureDecision {
 }
 
 @Serializable
+enum class PalmPosture { ANY, LEFT_OF_PEN, RIGHT_OF_PEN, BELOW_PEN }
+
+@Serializable
 data class StylusInputPolicy(
     val stylusOnlyDrawing: Boolean = false,
     val palmRejectionEnabled: Boolean = true,
     val temporaryEraserButtonEnabled: Boolean = true,
-    val palmRejectionWindowMs: Long = 300L
+    val palmRejectionWindowMs: Long = 300L,
+    val palmPosture: PalmPosture = PalmPosture.ANY
 )
 
 @Serializable

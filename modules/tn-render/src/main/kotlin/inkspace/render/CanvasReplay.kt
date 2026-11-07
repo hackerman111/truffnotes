@@ -438,7 +438,8 @@ class CanvasReplay {
         textPort: TextPort,
         androidCanvas: Canvas? = null,
         pdfVectorCommandsOut: StringBuilder? = null,
-        resourcePort: ResourcePort? = null
+        resourcePort: ResourcePort? = null,
+        includePaper: Boolean = true
     ): Outcome<Pair<ReplayCounters, IntArray?>, RenderError> {
         val counters = ReplayCounters()
         val softwareSurface = if (computePixels) {
@@ -449,13 +450,18 @@ class CanvasReplay {
             null
         }
 
-        androidCanvas?.drawColor(prepared.scene.backgroundColorArgb)
-        for (page in prepared.visiblePages) {
+        if (pdfVectorCommandsOut == null) androidCanvas?.drawColor(prepared.scene.backgroundColorArgb)
+        for (page in if(includePaper) prepared.visiblePages else emptyList()) {
             val bounds = CameraRelativeProjector.projectWorldRectToView(page.worldBounds,camera)
             softwareSurface?.drawFilledRect(bounds,page.descriptor.metadata.backgroundColor)
             softwareSurface?.setClipRect(bounds)
             val grid=page.descriptor.metadata.template?.grid
             if(grid!=null && grid.kind!=inkspace.core.pages.PaperGrid.BLANK && grid.spacingPt*camera.scale>=4) {
+                val paperPaint=Paint(Paint.ANTI_ALIAS_FLAG).apply { color=grid.color; strokeWidth=0.6f; style=Paint.Style.STROKE }
+                fun paperLine(x1: Float,y1: Float,x2: Float,y2: Float) {
+                    softwareSurface?.drawPolyline(floatArrayOf(x1,x2),floatArrayOf(y1,y2),2,grid.color,0.6f,false)
+                    androidCanvas?.drawLine(x1,y1,x2,y2,paperPaint)
+                }
                 val spacing=(grid.spacingPt*camera.scale).toFloat()
                 val firstX=max(bounds.left,0f); val firstY=max(bounds.top,0f)
                 val lastX=min(bounds.right,targetWidthPx.toFloat()); val lastY=min(bounds.bottom,targetHeightPx.toFloat())
@@ -466,20 +472,20 @@ class CanvasReplay {
                 while(y<=lastY && rows++<5000) {
                     if(grid.kind==inkspace.core.pages.PaperGrid.DOT) {
                         var x=startX;var columns=0
-                        while(x<=lastX && columns++<5000) { softwareSurface?.drawFilledCircle(x,y,0.7f,grid.color);x+=spacing }
-                    } else softwareSurface?.drawPolyline(floatArrayOf(firstX,lastX),floatArrayOf(y,y),2,grid.color,0.6f,false)
+                        while(x<=lastX && columns++<5000) { softwareSurface?.drawFilledCircle(x,y,0.7f,grid.color); paperPaint.style=Paint.Style.FILL; androidCanvas?.drawCircle(x,y,0.7f,paperPaint); paperPaint.style=Paint.Style.STROKE; x+=spacing }
+                    } else paperLine(firstX,y,lastX,y)
                     y+=spacing
                 }
                 if(grid.kind in setOf(inkspace.core.pages.PaperGrid.SQUARE,inkspace.core.pages.PaperGrid.MILLIMETER)) {
                     var x=startX;var columns=0
-                    while(x<=lastX && columns++<5000) { softwareSurface?.drawPolyline(floatArrayOf(x,x),floatArrayOf(firstY,lastY),2,grid.color,0.6f,false);x+=spacing }
+                    while(x<=lastX && columns++<5000) { paperLine(x,firstY,x,lastY);x+=spacing }
                 }
                 if(grid.kind==inkspace.core.pages.PaperGrid.ISOMETRIC) {
                     val height=lastY-firstY
                     var x=startX-height*0.57735f;var columns=0
                     while(x<=lastX+height && columns++<5000) {
-                        softwareSurface?.drawPolyline(floatArrayOf(x,x+height*0.57735f),floatArrayOf(firstY,lastY),2,grid.color,0.6f,false)
-                        softwareSurface?.drawPolyline(floatArrayOf(x,x-height*0.57735f),floatArrayOf(firstY,lastY),2,grid.color,0.6f,false)
+                        paperLine(x,firstY,x+height*0.57735f,lastY)
+                        paperLine(x,firstY,x-height*0.57735f,lastY)
                         x+=spacing
                     }
                 }
@@ -542,40 +548,32 @@ class CanvasReplay {
                         counters.drawnStrokes += 1
                     }
                     is ShapePayload -> {
-                        val viewRect = CameraRelativeProjector.projectWorldRectToView(obj.bounds, camera)
-                        val fill = payload.fillColor
-                        if (fill != null) {
-                            val fillMod = SoftwareArgbSurface.modulateAlpha(fill, effectiveOpacity)
-                            softwareSurface?.drawFilledRect(viewRect, fillMod)
+                        val local = payload.containerBounds ?: obj.transform.invert()?.transformRect(obj.bounds) ?: obj.bounds
+                        ShapeReplayGeometry.contours(payload,local).forEachIndexed { index, contour ->
+                            drawContour(contour,obj.transform,camera,payload.strokeColor,
+                                if (index == 0) payload.fillColor else payload.strokeColor,effectiveOpacity,payload.strokeWidthPt,
+                                softwareSurface,androidCanvas,pdfVectorCommandsOut)
                         }
-                        val strokeMod = SoftwareArgbSurface.modulateAlpha(payload.strokeColor, effectiveOpacity)
-                        val widthPx = (payload.strokeWidthPt * camera.scale).toFloat().coerceAtLeast(1.0f)
-                        if (payload.shapeType == ShapeType.Ellipse) {
-                            val r = min(viewRect.width, viewRect.height) * 0.5f
-                            softwareSurface?.drawFilledCircle(
-                                (viewRect.left + viewRect.right) * 0.5f,
-                                (viewRect.top + viewRect.bottom) * 0.5f,
-                                r,
-                                fill ?: strokeMod
-                            )
-                        } else {
-                            softwareSurface?.drawStrokeRect(viewRect, strokeMod, widthPx)
-                        }
-                        pdfVectorCommandsOut?.append(
-                            String.format(
-                                Locale.US,
-                                "%.2f %.2f %.2f %.2f re S\n",
-                                viewRect.left,
-                                viewRect.top,
-                                viewRect.width,
-                                viewRect.height
-                            )
-                        )
                         payload.label?.let { label ->
                             val result = drawText(obj,label,effectiveOpacity,prepared,camera,softwareSurface,androidCanvas,derivedCache,textPort,counters)
                             if (result is Outcome.Failure) return result
                         }
                         counters.drawnShapes += 1
+                    }
+                    is inkspace.core.payload.ConnectorPayload -> {
+                        val start = payload.resolvedStartPoint ?: prepared.scene.snapshot.getObject(payload.sourceId)?.bounds?.let { payload.sourceAnchor.resolveWorldPoint(it) }
+                        val end = payload.resolvedEndPoint ?: prepared.scene.snapshot.getObject(payload.targetId)?.bounds?.let { payload.targetAnchor.resolveWorldPoint(it) }
+                        if (start != null && end != null) {
+                            val shape = ShapePayload(if (payload.controlPoints.isEmpty()) inkspace.core.payload.ShapeType.Line else inkspace.core.payload.ShapeType.Curve,
+                                payload.strokeColor, strokeWidthPt = payload.strokeWidthPt, vertices = listOf(start,end),
+                                controlPoints = payload.controlPoints, startArrowhead = payload.startArrowhead, endArrowhead = payload.endArrowhead)
+                            ShapeReplayGeometry.contours(shape,obj.bounds).forEachIndexed { index, contour ->
+                                drawContour(contour,AffineTransform2D.IDENTITY,camera,payload.strokeColor,
+                                    if (index == 0) null else payload.strokeColor,effectiveOpacity,payload.strokeWidthPt,
+                                    softwareSurface,androidCanvas,pdfVectorCommandsOut)
+                            }
+                            counters.drawnShapes += 1
+                        }
                     }
                     is TextPayload -> {
                         val result = drawText(obj, payload, effectiveOpacity, prepared, camera, softwareSurface,
@@ -599,7 +597,7 @@ class CanvasReplay {
                             if (tile != null) {
                                 val local = payload.containerBounds ?: obj.transform.invert()?.transformRect(obj.bounds) ?: obj.bounds
                                 val crop = payload.cropRect ?: DocRect(0.0,0.0,payload.naturalWidthPx.toDouble(),payload.naturalHeightPx.toDouble())
-                                softwareSurface?.drawRaster(tile.widthPx,tile.heightPx,local,obj.transform,camera,effectiveOpacity,
+                                fun imageRaster(target: SoftwareArgbSurface, projection: CameraTransform) { target.drawRaster(tile.widthPx,tile.heightPx,local,obj.transform,projection,effectiveOpacity,
                                     { x,y -> tile.pixelAt(x,y) }, { u,v ->
                                         val (px, py) = when (payload.exifOrientation) {
                                             2 -> Pair((1.0 - u) * payload.naturalWidthPx, v * payload.naturalHeightPx)
@@ -613,7 +611,18 @@ class CanvasReplay {
                                         }
                                         px >= crop.left && px <= crop.right && py >= crop.top && py <= crop.bottom &&
                                             (payload.cropMask.isEmpty() || insidePolygon(px,py,payload.cropMask))
-                                    })
+                                    }) }
+                                softwareSurface?.let { target -> imageRaster(target,camera) }
+                                if (androidCanvas != null) {
+                                    val view = CameraRelativeProjector.projectWorldRectToView(obj.bounds,camera)
+                                    val ratio = min(1.0, min(2048.0 / view.width.coerceAtLeast(1f),2048.0 / view.height.coerceAtLeast(1f)))
+                                    val width = ceil(view.width * ratio).toInt().coerceIn(1,2048)
+                                    val height = ceil(view.height * ratio).toInt().coerceIn(1,2048)
+                                    val image = SoftwareArgbSurface(width,height)
+                                    imageRaster(image,CameraTransform(camera.scale * ratio,(camera.translateX-view.left)*ratio,(camera.translateY-view.top)*ratio))
+                                    val bitmap = android.graphics.Bitmap.createBitmap(image.pixels,width,height,android.graphics.Bitmap.Config.ARGB_8888)
+                                    try { androidCanvas.drawBitmap(bitmap,null,android.graphics.RectF(view.left,view.top,view.right,view.bottom),null) } finally { bitmap.recycle() }
+                                }
                                 counters.drawnTiles++
                             }
                         }
@@ -621,7 +630,8 @@ class CanvasReplay {
                     is StickyPayload -> {
                         val viewRect = CameraRelativeProjector.projectWorldRectToView(obj.bounds, camera)
                         val colorMod = SoftwareArgbSurface.modulateAlpha(payload.color, effectiveOpacity)
-                        softwareSurface?.drawFilledRect(viewRect, colorMod)
+                        val local = obj.transform.invert()?.transformRect(obj.bounds) ?: obj.bounds
+                        drawContour(ShapeContour(listOf(DocPoint(local.left,local.top),DocPoint(local.right,local.top),DocPoint(local.right,local.bottom),DocPoint(local.left,local.bottom)),true,true),obj.transform,camera,payload.color,payload.color,effectiveOpacity,0.0,softwareSurface,androidCanvas,pdfVectorCommandsOut)
                         if (!payload.isCollapsed) {
                             val text = payload.richText ?: TextPayload(payload.content)
                             val result = drawText(obj,text,effectiveOpacity,prepared,camera,softwareSurface,androidCanvas,derivedCache,textPort,counters)
@@ -644,12 +654,18 @@ class CanvasReplay {
                                     xs[index] = (world.x * camera.scale + camera.translateX).toFloat()
                                     ys[index] = (world.y * camera.scale + camera.translateY).toFloat()
                                 }
-                                softwareSurface?.drawPolyline(xs,ys,xs.size,colorMod,(payload.widthPt * camera.scale).toFloat(),false)
+                                drawContour(ShapeContour(payload.points),obj.transform,camera,payload.patternColor,null,effectiveOpacity * payload.opacity,payload.widthPt,softwareSurface,androidCanvas,pdfVectorCommandsOut)
                                 if (payload.pattern != "solid") {
                                     val detail = SoftwareArgbSurface.modulateAlpha(0xff000000.toInt(),effectiveOpacity * .2f)
-                                    for (index in xs.indices step if(payload.pattern == "dotted") 2 else 3) softwareSurface?.drawFilledCircle(xs[index],ys[index],2f,detail)
+                                    for (index in xs.indices step if(payload.pattern == "dotted") 2 else 3) {
+                                        softwareSurface?.drawFilledCircle(xs[index],ys[index],2f,detail)
+                                        if (androidCanvas != null) { androidPaint.style = Paint.Style.FILL; androidPaint.color = detail; androidCanvas.drawCircle(xs[index],ys[index],2f,androidPaint) }
+                                    }
                                 }
-                            } else softwareSurface?.drawFilledRect(viewRect, colorMod)
+                            } else {
+                                val local = obj.transform.invert()?.transformRect(obj.bounds) ?: obj.bounds
+                                drawContour(ShapeContour(listOf(DocPoint(local.left,local.top),DocPoint(local.right,local.top),DocPoint(local.right,local.bottom),DocPoint(local.left,local.bottom)),true,true),obj.transform,camera,payload.patternColor,payload.patternColor,effectiveOpacity * payload.opacity,0.0,softwareSurface,androidCanvas,pdfVectorCommandsOut)
+                            }
                         }
                         counters.drawnShapes += 1
                     }
@@ -701,6 +717,36 @@ class CanvasReplay {
         }
 
         return Outcome.Success(counters to softwareSurface?.pixels)
+    }
+
+    private fun drawContour(contour: ShapeContour, transform: AffineTransform2D, camera: CameraTransform,
+        stroke: Int, fill: Int?, opacity: Float, width: Double, software: SoftwareArgbSurface?, canvas: Canvas?, pdf: StringBuilder?) {
+        if (contour.points.isEmpty()) return
+        val points = contour.points.map { transform.transformPoint(it) }.map { val view = camera.docToView(it); DocPoint(view.x,view.y) }
+        val pathPoints = if (contour.closed) points + points.first() else points
+        val xs = pathPoints.map { it.x.toFloat() }.toFloatArray(); val ys = pathPoints.map { it.y.toFloat() }.toFloatArray()
+        val color = SoftwareArgbSurface.modulateAlpha(stroke,opacity)
+        val fillColor = fill?.let { SoftwareArgbSurface.modulateAlpha(it,opacity) }
+        if (contour.fill && fillColor != null && points.size >= 3) {
+            val bounds = DocRect(points.minOf { it.x },points.minOf { it.y },points.maxOf { it.x },points.maxOf { it.y })
+            if (bounds.width > 0 && bounds.height > 0) software?.drawRaster(1,1,bounds,AffineTransform2D.IDENTITY,CameraTransform(),1f,{ _,_ -> fillColor },{ u,v -> insidePolygon(bounds.left+u*bounds.width,bounds.top+v*bounds.height,points) })
+        }
+        val widthPx = (width * camera.scale).toFloat()
+        if (width > 0) software?.drawPolyline(xs,ys,xs.size,color,widthPx,false)
+        if (canvas != null) {
+            androidPath.reset(); androidPath.moveTo(xs[0],ys[0]); for (i in 1 until xs.size) androidPath.lineTo(xs[i],ys[i]); if (contour.closed) androidPath.close()
+            if (contour.fill && fillColor != null) { androidPaint.style = Paint.Style.FILL; androidPaint.color = fillColor; canvas.drawPath(androidPath,androidPaint) }
+            if (width > 0) { androidPaint.style = Paint.Style.STROKE; androidPaint.strokeCap = Paint.Cap.ROUND; androidPaint.strokeJoin = Paint.Join.ROUND; androidPaint.strokeWidth = widthPx; androidPaint.color = color; canvas.drawPath(androidPath,androidPaint) }
+        }
+        if (pdf != null) {
+            fun rgb(value: Int) = String.format(Locale.US,"%.4f %.4f %.4f",((value ushr 16) and 255)/255.0,((value ushr 8) and 255)/255.0,(value and 255)/255.0)
+            pdf.append("q ").append(rgb(stroke)).append(" RG ")
+            if (fill != null) pdf.append(rgb(fill)).append(" rg ")
+            pdf.append(String.format(Locale.US,"%.3f w 1 J 1 j %.3f %.3f m ",widthPx,xs[0],ys[0]))
+            for (i in 1 until xs.size) pdf.append(String.format(Locale.US,"%.3f %.3f l ",xs[i],ys[i]))
+            if (contour.closed) pdf.append("h ")
+            pdf.append(if (contour.fill && fill != null) { if(width > 0) "B" else "f" } else "S").append(" Q\n")
+        }
     }
 
     private fun drawText(obj: SceneObject, payload: TextPayload, opacity: Float, prepared: PreparedScene,

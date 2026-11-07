@@ -650,7 +650,7 @@ object ShapePlanner {
                 space = ctx.activeSpaceId,
                 layer = ctx.activeLayerId,
                 id = action.objectId,
-                payload = action.payload,
+                payload = action.payload.copy(containerBounds = action.payload.containerBounds ?: action.bounds),
                 bounds = action.bounds,
                 targetVersion = 1L
             )
